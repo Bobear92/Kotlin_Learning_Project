@@ -1,0 +1,23 @@
+# Python (hook scripts)
+__pycache__/
+*.pyc
+
+# Gradle / Kotlin build output
+.gradle/
+build/
+.kotlin/
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+out/
+
+# Local secrets and OS files
+.env
+.env.*
+.DS_Store
+Thumbs.db
+
+# Claude Code per-user settings (shared settings.json stays committed)
+.claude/settings.local.json

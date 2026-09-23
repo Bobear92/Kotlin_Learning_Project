@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [ { "type": "command", "command": "python \"$CLAUDE_PROJECT_DIR/scripts/branch_guard.py\" session-start", "timeout": 10 } ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash|PowerShell",
+        "hooks": [ { "type": "command", "command": "python \"$CLAUDE_PROJECT_DIR/scripts/branch_guard.py\" pre-tool-use", "timeout": 10 } ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [ { "type": "command", "command": "python \"$CLAUDE_PROJECT_DIR/scripts/check_kdoc.py\"", "timeout": 15 } ]
+      }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "python \"$CLAUDE_PROJECT_DIR/scripts/export_sessions.py\"", "timeout": 30 } ] }
+    ]
+  }
+}
