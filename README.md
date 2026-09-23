@@ -28,10 +28,14 @@ Request bodies are `{"quantity": <integer ≥ 1>}`. Success bodies are
 | **Kotlin** (JVM) | Nuuly's production language, and one I want to learn in depth (see [Learning Kotlin](#learning-kotlin-with-this-project)). |
 | **Spring Boot**, Spring MVC | Nuuly's production framework. Nuuly evaluated Micronaut and found its speed gains didn't outweigh the environment problems it caused, so they chose Spring. |
 | **Gradle, Kotlin DSL** | The standard build for Kotlin and Spring. Build scripts are written in Kotlin too. |
+| **PostgreSQL 18** + **Flyway** | The database enforces the no-oversell rule; Flyway applies versioned SQL migrations at startup. See the decision record below. |
 | **JUnit 5** + Spring test support | Controller tests via `MockMvc`, plus full-context integration tests. |
+| **Testcontainers** | Tests run against a real Postgres in Docker, never an in-memory stand-in. |
 
-Exact versions (Spring Boot, Kotlin, JDK) will be pinned when the project is scaffolded
-and recorded here.
+Pinned versions: **Spring Boot 4.1.1**, **Kotlin 2.3.21**, **Java 21** (Gradle toolchain),
+**Gradle 9.7.1** (wrapper), **PostgreSQL 18**. The project was generated with Spring
+Initializr and then annotated by hand; the exact command is in the commit
+"Generate the Spring Boot project with Spring Initializr".
 
 ## Open decisions
 
@@ -88,20 +92,48 @@ control, multi-instance tests, load tests and property-based tests. The full pla
 **Prerequisites:** JDK 21 and Docker Desktop (running). Postgres starts automatically in a
 container; there is nothing to install or configure by hand.
 
-_Commands coming with the first scaffold commit._ The goal is one command to run and one to test.
+```sh
+./gradlew bootRun   # start the API on http://localhost:8080 (Windows: gradlew.bat bootRun)
+./gradlew test      # run all tests, each against a throwaway Postgres container
+./gradlew build     # compile, test and package build/libs/inventory-0.0.1-SNAPSHOT.jar
+```
+
+`bootRun` starts Postgres from [compose.yaml](compose.yaml) automatically (Spring Boot's
+Docker Compose support) and stops it on shutdown. Tests don't use Compose; Testcontainers
+starts a fresh Postgres for them. No database URL or password needs configuring.
 
 ## Project layout
 
 ```text
+build.gradle.kts         The build: plugins, dependencies, Kotlin/Java settings
+settings.gradle.kts      Project name (single-module build)
+gradlew, gradle/wrapper/ Gradle wrapper; pins the Gradle version, nothing to install
+compose.yaml             Local Postgres for bootRun
+src/main/
+  kotlin/com/robertwoolbright/inventory/
+    InventoryApplication.kt   Entry point; component scan starts here
+    inventory/                The inventory feature: controller, service, repository, models
+  resources/
+    application.yml           Spring Boot configuration
+    db/migration/             Flyway SQL migrations (V1__..., V2__...)
+    openapi/inventory.yaml    The OpenAPI contract (source of truth)
+src/test/kotlin/com/robertwoolbright/inventory/
+  inventory/                  Feature tests: repository, controller, concurrency races
+  support/                    Shared test setup (the Testcontainers Postgres)
 .claude/                 Claude Code configuration (hooks, agents, skills) — see below
 CLAUDE.md                Project memory and coding standards for Claude Code
-src/main/resources/
-  openapi/inventory.yaml The OpenAPI contract (source of truth)
 docs/
   learning/              Kotlin/Spring concept index and walkthrough logs
   ai-sessions/           Exported transcripts of every AI session on this project
 scripts/                 Hook scripts (branch guard, KDoc check, session export)
 ```
+
+**Package by feature.** Code is grouped by what it does (`inventory/`), not by technical
+layer (`controller/`, `service/`, `repository/`). File names still show the layer, so the
+controller → service → repository flow is easy to follow. This is a general JVM/Spring
+convention, not a Kotlin rule. One Kotlin difference is worth knowing: Kotlin has no
+package-private visibility. Its `internal` modifier means "visible within this Gradle
+module", so package boundaries are organizational, not enforced by the compiler.
 
 ## Learning Kotlin with this project
 
