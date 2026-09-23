@@ -1,9 +1,20 @@
+# Local Postgres for `./gradlew bootRun`.
+#
+# Spring: you never run `docker compose up` yourself. spring-boot-docker-compose (see
+# build.gradle.kts) finds this file on startup, starts the container, waits until Postgres
+# accepts connections, and configures the DataSource from the settings below. It stops the
+# container again when the app shuts down. Tests don't use this file; they use Testcontainers.
 services:
   postgres:
-    image: 'postgres:latest'
+    # Why: pinned to a major version instead of `latest`, so a new Postgres release can't
+    # change behavior underneath us. Keep in sync with support/TestcontainersConfiguration.kt.
+    image: 'postgres:18'
     environment:
-      - 'POSTGRES_DB=mydatabase'
-      - 'POSTGRES_PASSWORD=secret'
-      - 'POSTGRES_USER=myuser'
+      # Local-only throwaway credentials; the container isn't reachable from outside this machine.
+      - 'POSTGRES_DB=inventory'
+      - 'POSTGRES_USER=inventory'
+      - 'POSTGRES_PASSWORD=inventory'
     ports:
+      # Why: only the container port is listed, so Docker picks a free host port. This avoids a
+      # clash with any Postgres already running on 5432. Spring reads the mapped port from Docker.
       - '5432'
