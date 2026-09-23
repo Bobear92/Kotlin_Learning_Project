@@ -45,7 +45,16 @@ id("io.spring.dependency-management") version "1.1.7"
   the opposite; you have to write `final`). Spring sometimes creates a runtime *subclass* of
   your bean (a proxy) to add behavior, e.g. `@Transactional` or `@Configuration`, and it can't
   subclass a final class. This compiler plugin ("all-open") automatically makes classes with
-  Spring annotations `open`, so we don't have to write `open` everywhere.
+  Spring annotations `open`, and their methods too, so we don't have to write `open` everywhere.
+
+  **`final` isn't immutable.** `final`/`open` controls *subclassing and overriding*. Mutability
+  is a separate question (`val` vs `var`), and a final class can have `var` properties. The proxy
+  doesn't change your class's values; it **wraps method calls**, roughly
+  `override fun purchase() { begin(); super.purchase(); commit() }`. It needs to be able to
+  subclass the class *and* override each method. Without the plugin:
+  - final class: Spring fails at startup ("Cannot subclass final class"). Loud, easy to find.
+  - open class, final method: the proxy can't override the method, so it runs **without the
+    transaction, and without any error**. That's the dangerous case.
 - **`org.springframework.boot`**: adds `bootRun` (run from source) and `bootJar` (one runnable
   "fat" jar that contains all dependencies).
 - **`io.spring.dependency-management`**: imports Spring Boot's **BOM** (bill of materials), a
@@ -157,6 +166,7 @@ kotlin {
 Java code, because Java types carry no nullability. Kotlin treats an unannotated Java type as a
 **platform type**, shown as `String!`: you may treat it as nullable or not, and if you guess
 wrong you get a runtime NPE. Many Java libraries annotate their APIs instead.
+
 - **`-Xjsr305=strict`**: turns the JSR-305 annotations (`@Nonnull` / `@Nullable`) into real
   `String` / `String?` types, so a mistake becomes a compile error. Spring Framework 7 uses the
   newer JSpecify annotations, which Kotlin 2.1+ enforces by default; this flag covers libraries still

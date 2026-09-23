@@ -26,7 +26,7 @@ Request bodies are `{"quantity": <integer ≥ 1>}`. Success bodies are
 | Choice | Why |
 | --- | --- |
 | **Kotlin** (JVM) | Nuuly's production language, and one I want to learn in depth (see [Learning Kotlin](#learning-kotlin-with-this-project)). |
-| **Spring Boot**, Spring MVC | Nuuly's production framework. Nuuly evaluated Micronaut and found its speed gains didn't outweigh the environment problems it caused, so they chose Spring. |
+| **Spring Boot**, Spring MVC | Nuuly's production framework. Nuuly evaluated Micronaut and found its speed gains didn't outweigh the environment problems it caused, so they chose Spring (see below). |
 | **Gradle, Kotlin DSL** | The standard build for Kotlin and Spring. Build scripts are written in Kotlin too. |
 | **PostgreSQL 18** + **Flyway** | The database enforces the no-oversell rule; Flyway applies versioned SQL migrations at startup. See the decision record below. |
 | **JUnit 6** (Jupiter) + Spring test support | Controller tests via `MockMvc`, plus full-context integration tests. |
@@ -34,8 +34,17 @@ Request bodies are `{"quantity": <integer ≥ 1>}`. Success bodies are
 
 Pinned versions: **Spring Boot 4.1.1**, **Kotlin 2.3.21**, **Java 21** (Gradle toolchain),
 **Gradle 9.7.1** (wrapper), **PostgreSQL 18**. The project was generated with Spring
-Initializr and then annotated by hand; the exact command is in the commit
+Initializr and then trimmed by hand; the exact command is in the commit
 "Generate the Spring Boot project with Spring Initializr".
+
+**Why Spring rather than Micronaut.** Seth, an architect at Nuuly, told me the team moved to
+Spring because managing configuration across environments was painful with Micronaut. A bug in
+that area once kept them out of production for three days. Micronaut starts faster, but for
+long-running services a few seconds of startup matter far less than configuration that behaves
+predictably everywhere. This project follows the same principle: the jar carries safe defaults in
+`application.yml`, and each environment supplies its own values through environment variables or
+command-line arguments, which Spring layers on top in a fixed order. No environment-specific
+settings or passwords live in the repo.
 
 ## Open decisions
 
@@ -101,6 +110,10 @@ container; there is nothing to install or configure by hand.
 `bootRun` starts Postgres from [compose.yaml](compose.yaml) automatically (Spring Boot's
 Docker Compose support) and stops it on shutdown. Tests don't use Compose; Testcontainers
 starts a fresh Postgres for them. No database URL or password needs configuring.
+
+**Troubleshooting (Windows):** if `gradlew` says `JAVA_HOME is not set` right after installing
+the JDK, the terminal (or VS Code itself) was opened before the install and has a stale
+environment. Close and reopen it completely.
 
 ## Project layout
 

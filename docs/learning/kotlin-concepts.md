@@ -10,6 +10,7 @@ and `/walkthrough` add rows as new concepts come up.
 | --- | --- | --- |
 | Trailing lambdas / type-safe builders | A lambda passed last can sit outside `()`; Gradle's `plugins { }` blocks are function calls | [build.gradle.kts](notes/build.gradle.kts.md) |
 | Final by default | Classes and functions are `final` unless `open`; the `plugin.spring` compiler plugin opens Spring beans | [build.gradle.kts](notes/build.gradle.kts.md) |
+| Final is not immutable | `open`/`final` controls subclassing and overriding; `val`/`var` controls mutability. A final method under a Spring proxy fails silently | [build.gradle.kts](notes/build.gradle.kts.md) |
 | Platform types and `-Xjsr305=strict` | How Java nullability annotations become real `T` / `T?` types | [build.gradle.kts](notes/build.gradle.kts.md) |
 | Class with no body | `class InventoryApplication` needs no braces | [InventoryApplication.kt](notes/main/InventoryApplication.kt.md) |
 | Top-level functions | `fun main` lives outside any class; compiled into `InventoryApplicationKt` | [InventoryApplication.kt](notes/main/InventoryApplication.kt.md) |
@@ -29,6 +30,9 @@ and `/walkthrough` add rows as new concepts come up.
 | `@SpringBootApplication` | `@Configuration` + `@EnableAutoConfiguration` + `@ComponentScan` from this package down | [InventoryApplication.kt](notes/main/InventoryApplication.kt.md) |
 | Starters and the Boot BOM | Starters bundle dependencies; the dependency-management plugin supplies versions | [build.gradle.kts](notes/build.gradle.kts.md) |
 | Docker Compose support | `bootRun` starts compose.yaml and wires the DataSource | [compose.yaml](notes/compose.yaml.md) |
+| Property source precedence | Command line > environment variables > application.yml > defaults; relaxed binding maps `SPRING_DATASOURCE_URL` to `spring.datasource.url` | [application.yml](notes/main/resources/application.yml.md) |
+| Connection details | Compose / Testcontainers supply the DB connection, overriding `spring.datasource.*` | [application.yml](notes/main/resources/application.yml.md) |
+| Test context caching | Identical test configurations share one context (and container) until the run ends | [TestcontainersConfiguration.kt](notes/test/support/TestcontainersConfiguration.kt.md) |
 | `@TestConfiguration` + `@Import` | Test-only beans that component scanning skips | [TestcontainersConfiguration.kt](notes/test/support/TestcontainersConfiguration.kt.md) |
 | `@ServiceConnection` | A Testcontainers container supplies DataSource connection details | [TestcontainersConfiguration.kt](notes/test/support/TestcontainersConfiguration.kt.md) |
 | `@SpringBootTest` | Starts the full application context in a test | [InventoryApplicationTests.kt](notes/test/InventoryApplicationTests.kt.md) |

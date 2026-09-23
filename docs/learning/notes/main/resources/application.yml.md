@@ -21,9 +21,26 @@ from `spring.datasource.url`, `username` and `password`. Docker Compose support 
 `@ServiceConnection` both register a `JdbcConnectionDetails` bean that takes priority over those
 properties, so the database is wherever the container is.
 
-**Why:** this means no hard-coded port and no password in a committed file. In production you'd
-set `SPRING_DATASOURCE_URL` and friends as environment variables; Spring maps environment
-variables onto these properties automatically ("relaxed binding").
+**Why:** this means no hard-coded port and no password in a committed file.
+
+**Spring: property sources.** This file is only one layer of configuration. Spring reads several
+sources, and a higher one overrides a lower one:
+
+```text
+1. Command-line arguments      java -jar inventory.jar --spring.datasource.url=...
+2. Environment variables       SPRING_DATASOURCE_URL=...
+3. application.yml             (inside the jar)
+4. Spring Boot's defaults
+```
+
+So production never edits this file. It sets environment variables, and Spring maps
+`SPRING_DATASOURCE_URL` to `spring.datasource.url` (uppercase to lowercase, `_` to `.`), which
+is called **relaxed binding**. The same jar runs everywhere; only the environment changes (the
+"config" rule of the twelve-factor app), and passwords come from the server's secret store
+instead of git.
+
+Try it: `$env:SPRING_APPLICATION_NAME = "hello-override"; ./gradlew bootRun` makes every log
+line say `[hello-override]`, even though this file says `inventory`.
 
 ### The application name
 
