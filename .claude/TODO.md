@@ -23,10 +23,14 @@ and checks items off as they are done. Newest decisions are recorded in the READ
 
 ## Scaffold
 
-- [ ] Spring Boot + Kotlin + Gradle Kotlin DSL project (pin versions in README)
-- [ ] Docker Compose file for Postgres; Spring Boot Docker Compose support for `bootRun`
-- [ ] Testcontainers for tests
-- [ ] README "Build and run" section filled in and verified from a clean clone
+- [x] Project layout decided: single Gradle module at the repo root, package by feature
+      (`com.robertwoolbright.inventory`), contract moved to `src/main/resources/openapi/` (2026-09-23)
+- [x] Spring Boot + Kotlin + Gradle Kotlin DSL project (Initializr, versions pinned in README) (2026-09-23)
+- [x] Docker Compose file for Postgres; Spring Boot Docker Compose support for `bootRun` (2026-09-23)
+- [x] Testcontainers for tests (`support/TestcontainersConfiguration.kt`) (2026-09-23)
+- [ ] README "Build and run" section verified from a clean clone (verified in the working tree only)
+- [ ] `V1__create_inventory.sql` migration (table + `CHECK (quantity >= 0)`), with the first feature
+- [ ] `/walkthrough` of the scaffold (build.gradle.kts, compose.yaml, application.yml, the three .kt files)
 
 ## Features (one `/feature` + `/walkthrough` each)
 

@@ -4,7 +4,7 @@ A small inventory-management REST API built for the Nuuly services assessment. I
 receives stock by SKU, processes purchases without overselling, and reports current
 inventory levels.
 
-The API contract is [docs/open_api/inventory.yaml](docs/open_api/inventory.yaml)
+The API contract is [src/main/resources/openapi/inventory.yaml](src/main/resources/openapi/inventory.yaml)
 (OpenAPI 3.0.3), and the implementation must conform to it exactly. The original brief
 is in [docs/Nuuly_Assessment_Instructions.txt](docs/Nuuly_Assessment_Instructions.txt).
 
@@ -26,12 +26,25 @@ Request bodies are `{"quantity": <integer ≥ 1>}`. Success bodies are
 | Choice | Why |
 | --- | --- |
 | **Kotlin** (JVM) | Nuuly's production language, and one I want to learn in depth (see [Learning Kotlin](#learning-kotlin-with-this-project)). |
-| **Spring Boot**, Spring MVC | Nuuly's production framework. Nuuly evaluated Micronaut and found its speed gains didn't outweigh the environment problems it caused, so they chose Spring. |
+| **Spring Boot**, Spring MVC | Nuuly's production framework. Nuuly evaluated Micronaut and found its speed gains didn't outweigh the environment problems it caused, so they chose Spring (see below). |
 | **Gradle, Kotlin DSL** | The standard build for Kotlin and Spring. Build scripts are written in Kotlin too. |
-| **JUnit 5** + Spring test support | Controller tests via `MockMvc`, plus full-context integration tests. |
+| **PostgreSQL 18** + **Flyway** | The database enforces the no-oversell rule; Flyway applies versioned SQL migrations at startup. See the decision record below. |
+| **JUnit 6** (Jupiter) + Spring test support | Controller tests via `MockMvc`, plus full-context integration tests. |
+| **Testcontainers** | Tests run against a real Postgres in Docker, never an in-memory stand-in. |
 
-Exact versions (Spring Boot, Kotlin, JDK) will be pinned when the project is scaffolded
-and recorded here.
+Pinned versions: **Spring Boot 4.1.1**, **Kotlin 2.3.21**, **Java 21** (Gradle toolchain),
+**Gradle 9.7.1** (wrapper), **PostgreSQL 18**. The project was generated with Spring
+Initializr and then trimmed by hand; the exact command is in the commit
+"Generate the Spring Boot project with Spring Initializr".
+
+**Why Spring rather than Micronaut.** Seth, an architect at Nuuly, told me the team moved to
+Spring because managing configuration across environments was painful with Micronaut. A bug in
+that area once kept them out of production for three days. Micronaut starts faster, but for
+long-running services a few seconds of startup matter far less than configuration that behaves
+predictably everywhere. This project follows the same principle: the jar carries safe defaults in
+`application.yml`, and each environment supplies its own values through environment variables or
+command-line arguments, which Spring layers on top in a fixed order. No environment-specific
+settings or passwords live in the repo.
 
 ## Open decisions
 
@@ -88,32 +101,67 @@ control, multi-instance tests, load tests and property-based tests. The full pla
 **Prerequisites:** JDK 21 and Docker Desktop (running). Postgres starts automatically in a
 container; there is nothing to install or configure by hand.
 
-_Commands coming with the first scaffold commit._ The goal is one command to run and one to test.
+```sh
+./gradlew bootRun   # start the API on http://localhost:8080 (Windows: gradlew.bat bootRun)
+./gradlew test      # run all tests, each against a throwaway Postgres container
+./gradlew build     # compile, test and package build/libs/inventory-0.0.1-SNAPSHOT.jar
+```
+
+`bootRun` starts Postgres from [compose.yaml](compose.yaml) automatically (Spring Boot's
+Docker Compose support) and stops it on shutdown. Tests don't use Compose; Testcontainers
+starts a fresh Postgres for them. No database URL or password needs configuring.
+
+**Troubleshooting (Windows):** if `gradlew` says `JAVA_HOME is not set` right after installing
+the JDK, the terminal (or VS Code itself) was opened before the install and has a stale
+environment. Close and reopen it completely.
 
 ## Project layout
 
 ```text
+build.gradle.kts         The build: plugins, dependencies, Kotlin/Java settings
+settings.gradle.kts      Project name (single-module build)
+gradlew, gradle/wrapper/ Gradle wrapper; pins the Gradle version, nothing to install
+compose.yaml             Local Postgres for bootRun
+src/main/
+  kotlin/com/robertwoolbright/inventory/
+    InventoryApplication.kt   Entry point; component scan starts here
+    inventory/                The inventory feature: controller, service, repository, models
+  resources/
+    application.yml           Spring Boot configuration
+    db/migration/             Flyway SQL migrations (V1__..., V2__...)
+    openapi/inventory.yaml    The OpenAPI contract (source of truth)
+src/test/kotlin/com/robertwoolbright/inventory/
+  inventory/                  Feature tests: repository, controller, concurrency races
+  support/                    Shared test setup (the Testcontainers Postgres)
 .claude/                 Claude Code configuration (hooks, agents, skills) — see below
 CLAUDE.md                Project memory and coding standards for Claude Code
 docs/
-  open_api/              The OpenAPI contract (source of truth)
-  learning/              Kotlin/Spring concept index and walkthrough logs
+  learning/
+    notes/               Study notes: one per source file, explaining it chunk by chunk
+    walkthroughs/        Logs of each /walkthrough session
+    kotlin-concepts.md   Index of every Kotlin/Spring concept, linked to its notes
   ai-sessions/           Exported transcripts of every AI session on this project
 scripts/                 Hook scripts (branch guard, KDoc check, session export)
 ```
 
+**Package by feature.** Code is grouped by what it does (`inventory/`), not by technical
+layer (`controller/`, `service/`, `repository/`). File names still show the layer, so the
+controller → service → repository flow is easy to follow. This is a general JVM/Spring
+convention, not a Kotlin rule. One Kotlin difference is worth knowing: Kotlin has no
+package-private visibility. Its `internal` modifier means "visible within this Gradle
+module", so package boundaries are organizational, not enforced by the compiler.
+
 ## Learning Kotlin with this project
 
-I'm using this assessment to learn Kotlin properly, so the code is commented far more
-heavily than normal production code:
+I'm using this assessment to learn Kotlin properly. The code itself stays clean, and the
+teaching lives next to it in study notes:
 
-- **KDoc on every non-private declaration**: what it does, why it exists, and where it
-  sits in the request flow.
-- **Tagged inline comments** that can be searched:
-  - `// Kotlin:` explains a language feature, often compared with Java
-  - `// Spring:` explains framework behavior that is otherwise invisible
-  - `// Why:` records a design decision and the alternative that was rejected
-  - `// Contract:` ties a line to a specific rule in the OpenAPI spec
+- **In the code:** short KDoc on every non-private declaration, plus one-line comments for
+  design decisions (`// Why:`) and OpenAPI rules (`// Contract:`).
+- **In [docs/learning/notes/](docs/learning/notes/README.md):** one notes file per source file.
+  It quotes the code a chunk at a time and explains the Kotlin features (compared with Java),
+  the Spring behavior the code doesn't show, and the decisions behind it, then ends with
+  self-check questions. A hook keeps the notes from falling behind the code.
 - **A walkthrough after every feature.** Before moving on, I go through the new code line by
   line with Claude, answer check-your-understanding questions, and log the session in
   [docs/learning/walkthroughs/](docs/learning/walkthroughs/). New concepts are indexed in
@@ -126,15 +174,17 @@ committed so reviewers can see how the AI was directed and checked:
 
 | File | Purpose |
 | --- | --- |
-| [CLAUDE.md](CLAUDE.md) | Project memory: contract rules, stack, commenting standard, feature workflow. |
-| [.claude/skills/feature](.claude/skills/feature/SKILL.md) | `/feature`: contract check → approved plan → tests + code → build → doc review → README → walkthrough hand-off. |
+| [CLAUDE.md](CLAUDE.md) | Project memory: contract rules, stack, documentation standard, feature workflow. |
+| [.claude/skills/feature](.claude/skills/feature/SKILL.md) | `/feature`: contract check → approved plan → tests + code → build → `/sync-docs` → walkthrough hand-off. |
+| [.claude/skills/sync-docs](.claude/skills/sync-docs/SKILL.md) | `/sync-docs`: updates study notes, concept index, README and TODO for whatever code changed, then runs `doc-reviewer`. |
 | [.claude/skills/walkthrough](.claude/skills/walkthrough/SKILL.md) | `/walkthrough`: interactive, file-by-file teaching session with understanding checks, logged to `docs/learning/`. |
 | [.claude/skills/ship](.claude/skills/ship/SKILL.md) | `/ship`: push the branch → open a PR → merge into `main` with a merge commit (never squash). |
-| [.claude/agents/doc-reviewer.md](.claude/agents/doc-reviewer.md) | Read-only agent that audits changed code against the commenting standard, accuracy first. |
+| [.claude/agents/doc-reviewer.md](.claude/agents/doc-reviewer.md) | Read-only agent that audits changed code and its study notes against the documentation standard, accuracy first. |
 | [.claude/TODO.md](.claude/TODO.md) | Working task list, including the oversell-protection test plan. |
-| [.claude/settings.json](.claude/settings.json) | Hook configuration for the three scripts below. |
+| [.claude/settings.json](.claude/settings.json) | Hook configuration for the scripts below. |
 | [scripts/branch_guard.py](scripts/branch_guard.py) | Keeps all work off `main`: flags a session that starts on `main`, blocks edits and commits there, and blocks direct pushes to `main` and squash merges. |
 | [scripts/check_kdoc.py](scripts/check_kdoc.py) | Reports missing KDoc after every edit to a `.kt` file. |
+| [scripts/check_notes.py](scripts/check_notes.py) | Stop hook: Claude can't finish a turn while a source file has changed more recently than its study notes. |
 | [scripts/export_sessions.py](scripts/export_sessions.py) | Exports session transcripts to `docs/ai-sessions/` after every Claude turn. |
 | [docs/ai-sessions/](docs/ai-sessions/) | Full transcripts of every session, including what I asked for and what I changed or rejected. |
 

@@ -9,12 +9,12 @@ process purchases, report inventory levels). Full brief: [docs/Nuuly_Assessment_
 
 **It is also a Kotlin master class.** Robert is learning Kotlin and wants to use this
 project to learn it properly, whatever happens with the interview. Every piece of
-code must teach as well as work. Treat "can Robert explain every line of this in the
+code must work and come with study notes that teach it. Treat "can Robert explain every line of this in the
 follow-up interview?" as a requirement alongside passing the tests.
 
 ## Source of truth
 
-- **API contract:** [docs/open_api/inventory.yaml](docs/open_api/inventory.yaml). Paths, status codes,
+- **API contract:** [src/main/resources/openapi/inventory.yaml](src/main/resources/openapi/inventory.yaml). Paths, status codes,
   content types and schemas must match it exactly. Error responses (400/404) are
   `text/plain` strings, not JSON. `quantity` in requests has `minimum: 1`.
 - If the contract is ambiguous (e.g. malformed JSON, missing body, SKU id format),
@@ -33,44 +33,53 @@ Every feature that touches stock must add or extend tests from that plan.
   Chosen because it is what Nuuly runs in production.
 - PostgreSQL (run with Docker Compose; Testcontainers in tests). Stock changes are single atomic
   SQL statements, backed by `CHECK (quantity >= 0)`. See the README decision record.
-- Tests: JUnit 5 with Spring's test support.
+- Tests: JUnit Jupiter 6 (Spring Boot 4's version; same API as JUnit 5) with Spring's test support.
 - Open decisions are tracked in the README under "Open decisions". Do not settle
   one silently; propose it, explain the trade-offs, and let Robert choose.
 
-## Commenting and documentation standard (teaching mode)
+## Documentation standard: clean code + study notes
 
-This goes further than normal production code on purpose. Follow it for every `.kt` file.
+The code reads like good production code. The teaching lives in a **study-notes file per
+source file** under [docs/learning/notes/](docs/learning/notes/README.md) (the README there
+has the path mapping and format).
+
+**In the code:**
 
 1. **KDoc on every non-private declaration**: classes, interfaces, objects, and functions.
-   Say what it does, why it exists, and where it sits in the request flow
-   (controller → service → repository). Use `@param`, `@return`, and `@throws` when
+   Keep it short: what it does and where it sits in the request flow
+   (controller → service → repository). Use `@param`, `@return`, and `@throws` only when
    they add information. Test classes get a KDoc saying what they cover.
    A PostToolUse hook ([scripts/check_kdoc.py](scripts/check_kdoc.py)) enforces this mechanically.
-2. **Tagged inline comments** explain the concepts, not the syntax. Use these prefixes so
-   they can be searched (`grep -rn "// Kotlin:" src`):
-   - `// Kotlin:` a Kotlin language feature (data class, null safety, `val` vs `var`,
-     scope functions, extension functions, `when`, default arguments, sealed types...).
-     Add a note on how Java would do it when that helps.
-   - `// Spring:` framework behavior that is otherwise invisible: what an annotation
-     does, how dependency injection wires this, what auto-configuration provides,
-     how a request is mapped or a response is serialized.
+2. **Inline comments only for decisions and contract rules**, one or two lines each:
    - `// Why:` a design decision and the alternative that was rejected.
    - `// Contract:` the line exists to satisfy a specific part of inventory.yaml.
-3. Explain a concept in full the first time it appears in a file. After that, a short
-   tag is enough. Longer explanations go in [docs/learning/kotlin-concepts.md](docs/learning/kotlin-concepts.md).
-4. Do not narrate trivial statements (`// increment counter`). Every comment should
-   teach something or record a decision.
-5. `build.gradle.kts` and `application.yml` get the same treatment: comment each plugin,
-   dependency and setting with what it is for.
+3. **First line links to the notes**: `// Study notes: docs/learning/notes/<mirrored path>.md`
+   (`#` in YAML, `--` in SQL). `check_notes.py` verifies it.
+4. **No teaching comments in code**: no `// Kotlin:` / `// Spring:` explanations, and no narration.
+   Build files and `application.yml` may carry a one-line "what it's for" where it isn't obvious.
+
+**In the notes** (`docs/learning/notes/<mirrored path>.md`):
+
+1. Walk the file top to bottom in small chunks. **Quote each chunk** (don't reference line numbers)
+   and explain it under `**Kotlin:**` (language features, with the Java equivalent when that
+   helps), `**Spring:**` (framework behavior the code doesn't show), `**Why:**` and `**Contract:**`.
+2. Explain a concept in full in the first notes file where it appears; elsewhere, link back to it.
+   Index new concepts in [docs/learning/kotlin-concepts.md](docs/learning/kotlin-concepts.md).
+3. End with "Check your understanding" questions, without answers.
+
+**Keeping them in sync:** every code change updates its notes in the same piece of work. Run
+`/sync-docs` to update them. A `Stop` hook ([scripts/check_notes.py](scripts/check_notes.py)) keeps
+Claude working while any source file has changed more recently than its notes (or has none).
 
 ## Feature workflow
 
 Use `/feature <description>` for any new behavior. It runs the whole loop:
 contract check → plan (Robert approves) → tests + implementation → build →
-`doc-reviewer` agent → README update → hand-off to `/walkthrough`.
+`/sync-docs` (notes, concepts index, README, TODO, then the `doc-reviewer` agent) → hand-off to `/walkthrough`.
+For any other code change, run `/sync-docs` before handing the work back.
 
 - **Do not start the next feature until the walkthrough for the current one is done.**
-- After the walkthrough, fix any comment that turned out to be unclear.
+- After the walkthrough, fix any note or comment that turned out to be unclear.
 - Keep changes small and commit-sized. The reviewers want a readable, unsquashed
   git history. Propose a commit message, but only commit when Robert says so or runs `/ship`.
 
@@ -95,12 +104,15 @@ contract check → plan (Robert approves) → tests + implementation → build �
   on recent changes, logged to [docs/learning/walkthroughs/](docs/learning/walkthroughs/).
 - `skills/ship/`: `/ship`, which pushes the current branch, opens a PR, and merges it into
   `main` with a merge commit. Build, test and review gates will be added later.
-- `agents/doc-reviewer.md`: read-only reviewer that checks changed code against the
-  commenting standard above.
+- `skills/sync-docs/`: `/sync-docs`, which updates study notes, the concepts index, the README
+  and TODO for whatever code changed, then runs `doc-reviewer`.
+- `agents/doc-reviewer.md`: read-only reviewer that checks changed code and its notes against
+  the documentation standard above, accuracy first.
 - `TODO.md`: the working task list.
 - `settings.json` hooks:
   - `SessionStart` + `PreToolUse`: `scripts/branch_guard.py` (see Git workflow).
-  - `Stop`: exports session transcripts to [docs/ai-sessions/](docs/ai-sessions/).
+  - `Stop`: exports session transcripts to [docs/ai-sessions/](docs/ai-sessions/), and runs
+    `scripts/check_notes.py` (stale or missing study notes send Claude back to `/sync-docs`).
   - `PostToolUse` (Edit/Write): runs `scripts/check_kdoc.py` on edited `.kt` files and
     reports missing KDoc back to Claude.
 

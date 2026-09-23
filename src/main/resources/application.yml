@@ -1,0 +1,6 @@
+# Study notes: docs/learning/notes/main/resources/application.yml.md
+# Why: no spring.datasource.* here. Docker Compose support (bootRun) and Testcontainers'
+# @ServiceConnection (tests) supply the connection details, so no credentials live in config.
+spring:
+  application:
+    name: inventory
