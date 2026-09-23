@@ -23,10 +23,15 @@ Ask whether that order works for him before starting.
 
 ## 2. Walk through one file at a time
 
+Each source file has a study-notes file in `docs/learning/notes/` (mapping in its README).
+Read the source and its notes first, and use the notes as your script: they hold the
+explanations and the check-your-understanding questions. If the notes are missing or don't
+match the code, run `/sync-docs` before starting.
+
 For each file:
 
 1. **Role.** One or two sentences on what this file is for and how a request reaches it.
-2. **Code in small chunks** (roughly 5–20 lines). Quote each chunk with its `path:line` reference, then explain:
+2. **Code in small chunks** (roughly 5–20 lines), following the notes' sections. Quote each chunk with its `path:line` reference, then explain:
    - every Kotlin feature in it: what it does, why it's idiomatic, and what the Java
      equivalent would look like when that comparison helps;
    - any Spring behavior that isn't visible in the code (what the framework does with the
@@ -38,7 +43,8 @@ For each file:
    **Wait for his reply before moving to the next file.** Don't answer your own question.
 4. If his answer is wrong or partial, re-explain it another way. Don't just repeat the
    explanation.
-5. If a question shows that a code comment is unclear or wrong, offer to fix the comment.
+5. If a question shows that a note or code comment is unclear or wrong, offer to fix it. Add
+   anything new you had to explain to the file's notes, so the notes improve after every walkthrough.
 
 Where a quick experiment would help, suggest one he can run himself, such as changing a
 value and rerunning a test to watch it fail, or a `curl` call against the running app.

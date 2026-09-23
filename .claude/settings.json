@@ -18,7 +18,8 @@
       }
     ],
     "Stop": [
-      { "hooks": [ { "type": "command", "command": "python \"$CLAUDE_PROJECT_DIR/scripts/export_sessions.py\"", "timeout": 30 } ] }
+      { "hooks": [ { "type": "command", "command": "python \"$CLAUDE_PROJECT_DIR/scripts/export_sessions.py\"", "timeout": 30 } ] },
+      { "hooks": [ { "type": "command", "command": "python \"$CLAUDE_PROJECT_DIR/scripts/check_notes.py\"", "timeout": 30 } ] }
     ]
   }
 }

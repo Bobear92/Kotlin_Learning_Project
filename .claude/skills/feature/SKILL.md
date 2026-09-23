@@ -1,6 +1,6 @@
 ---
 name: feature
-description: Build one feature of the inventory API end to end in teaching mode, covering contract check, approved plan, tests and implementation with full comments, doc review, README update and hand-off to /walkthrough. Use whenever Robert asks to add or change API behavior.
+description: Build one feature of the inventory API end to end in teaching mode, covering contract check, approved plan, tests and implementation, study notes and docs via /sync-docs, doc review and hand-off to /walkthrough. Use whenever Robert asks to add or change API behavior.
 argument-hint: <what to build, e.g. "POST /inventory/{skuId}">
 ---
 
@@ -32,9 +32,10 @@ introduce for the first time. That list becomes the agenda for the walkthrough.
 
 - Write the tests alongside the code: at least one per acceptance criterion, covering the error
   paths as well as the happy path.
-- Follow the commenting standard in `CLAUDE.md` as you write, not as a later pass. Use the
-  `// Kotlin:`, `// Spring:`, `// Why:` and `// Contract:` tags. Prefer idiomatic Kotlin, and when
-  an idiom is dense, keep it and explain it in a comment rather than writing Java-style Kotlin.
+- Follow the documentation standard in `CLAUDE.md`: short KDoc, one-line `// Why:` and
+  `// Contract:` comments, and no teaching comments in code. Prefer idiomatic Kotlin; when an
+  idiom is dense, keep it and explain it in the file's study notes rather than writing
+  Java-style Kotlin.
 - The PostToolUse hook reports missing KDoc after each edit. Fix those gaps immediately.
 
 ## 4. Build and test
@@ -43,15 +44,15 @@ Run the Gradle build and tests (`./gradlew build` or `gradlew.bat build`). Repor
 truthfully. If something fails, fix it and explain the failure. The failure is often
 the most useful thing to learn from.
 
-## 5. Documentation review
+## 5. Documentation
 
-Launch the `doc-reviewer` agent on the changed files. Fix every finding in categories 1–6 and
-rerun the agent until it returns `PASS`. Tell Robert what it caught.
+Run `/sync-docs`. It writes or updates the study notes for every changed file, the concepts
+index, the README (endpoint status, curl examples, decision records) and the TODO, then runs
+the `doc-reviewer` agent until it returns `PASS`. Tell Robert what the reviewer caught.
 
-## 6. README
+## 6. Check the docs gate
 
-If the feature changes how to build, run or call the API, or settles an open decision,
-update `README.md` (endpoint status, curl examples, decision record).
+`python scripts/check_notes.py` must print nothing. (The Stop hook enforces this too.)
 
 ## 7. Hand-off
 
