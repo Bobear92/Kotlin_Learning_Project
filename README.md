@@ -29,7 +29,7 @@ Request bodies are `{"quantity": <integer ≥ 1>}`. Success bodies are
 | **Spring Boot**, Spring MVC | Nuuly's production framework. Nuuly evaluated Micronaut and found its speed gains didn't outweigh the environment problems it caused, so they chose Spring. |
 | **Gradle, Kotlin DSL** | The standard build for Kotlin and Spring. Build scripts are written in Kotlin too. |
 | **PostgreSQL 18** + **Flyway** | The database enforces the no-oversell rule; Flyway applies versioned SQL migrations at startup. See the decision record below. |
-| **JUnit 5** + Spring test support | Controller tests via `MockMvc`, plus full-context integration tests. |
+| **JUnit 6** (Jupiter) + Spring test support | Controller tests via `MockMvc`, plus full-context integration tests. |
 | **Testcontainers** | Tests run against a real Postgres in Docker, never an in-memory stand-in. |
 
 Pinned versions: **Spring Boot 4.1.1**, **Kotlin 2.3.21**, **Java 21** (Gradle toolchain),
@@ -123,7 +123,10 @@ src/test/kotlin/com/robertwoolbright/inventory/
 .claude/                 Claude Code configuration (hooks, agents, skills) — see below
 CLAUDE.md                Project memory and coding standards for Claude Code
 docs/
-  learning/              Kotlin/Spring concept index and walkthrough logs
+  learning/
+    notes/               Study notes: one per source file, explaining it chunk by chunk
+    walkthroughs/        Logs of each /walkthrough session
+    kotlin-concepts.md   Index of every Kotlin/Spring concept, linked to its notes
   ai-sessions/           Exported transcripts of every AI session on this project
 scripts/                 Hook scripts (branch guard, KDoc check, session export)
 ```
@@ -137,16 +140,15 @@ module", so package boundaries are organizational, not enforced by the compiler.
 
 ## Learning Kotlin with this project
 
-I'm using this assessment to learn Kotlin properly, so the code is commented far more
-heavily than normal production code:
+I'm using this assessment to learn Kotlin properly. The code itself stays clean, and the
+teaching lives next to it in study notes:
 
-- **KDoc on every non-private declaration**: what it does, why it exists, and where it
-  sits in the request flow.
-- **Tagged inline comments** that can be searched:
-  - `// Kotlin:` explains a language feature, often compared with Java
-  - `// Spring:` explains framework behavior that is otherwise invisible
-  - `// Why:` records a design decision and the alternative that was rejected
-  - `// Contract:` ties a line to a specific rule in the OpenAPI spec
+- **In the code:** short KDoc on every non-private declaration, plus one-line comments for
+  design decisions (`// Why:`) and OpenAPI rules (`// Contract:`).
+- **In [docs/learning/notes/](docs/learning/notes/README.md):** one notes file per source file.
+  It quotes the code a chunk at a time and explains the Kotlin features (compared with Java),
+  the Spring behavior the code doesn't show, and the decisions behind it, then ends with
+  self-check questions. A hook keeps the notes from falling behind the code.
 - **A walkthrough after every feature.** Before moving on, I go through the new code line by
   line with Claude, answer check-your-understanding questions, and log the session in
   [docs/learning/walkthroughs/](docs/learning/walkthroughs/). New concepts are indexed in
@@ -159,15 +161,17 @@ committed so reviewers can see how the AI was directed and checked:
 
 | File | Purpose |
 | --- | --- |
-| [CLAUDE.md](CLAUDE.md) | Project memory: contract rules, stack, commenting standard, feature workflow. |
-| [.claude/skills/feature](.claude/skills/feature/SKILL.md) | `/feature`: contract check → approved plan → tests + code → build → doc review → README → walkthrough hand-off. |
+| [CLAUDE.md](CLAUDE.md) | Project memory: contract rules, stack, documentation standard, feature workflow. |
+| [.claude/skills/feature](.claude/skills/feature/SKILL.md) | `/feature`: contract check → approved plan → tests + code → build → `/sync-docs` → walkthrough hand-off. |
+| [.claude/skills/sync-docs](.claude/skills/sync-docs/SKILL.md) | `/sync-docs`: updates study notes, concept index, README and TODO for whatever code changed, then runs `doc-reviewer`. |
 | [.claude/skills/walkthrough](.claude/skills/walkthrough/SKILL.md) | `/walkthrough`: interactive, file-by-file teaching session with understanding checks, logged to `docs/learning/`. |
 | [.claude/skills/ship](.claude/skills/ship/SKILL.md) | `/ship`: push the branch → open a PR → merge into `main` with a merge commit (never squash). |
-| [.claude/agents/doc-reviewer.md](.claude/agents/doc-reviewer.md) | Read-only agent that audits changed code against the commenting standard, accuracy first. |
+| [.claude/agents/doc-reviewer.md](.claude/agents/doc-reviewer.md) | Read-only agent that audits changed code and its study notes against the documentation standard, accuracy first. |
 | [.claude/TODO.md](.claude/TODO.md) | Working task list, including the oversell-protection test plan. |
-| [.claude/settings.json](.claude/settings.json) | Hook configuration for the three scripts below. |
+| [.claude/settings.json](.claude/settings.json) | Hook configuration for the scripts below. |
 | [scripts/branch_guard.py](scripts/branch_guard.py) | Keeps all work off `main`: flags a session that starts on `main`, blocks edits and commits there, and blocks direct pushes to `main` and squash merges. |
 | [scripts/check_kdoc.py](scripts/check_kdoc.py) | Reports missing KDoc after every edit to a `.kt` file. |
+| [scripts/check_notes.py](scripts/check_notes.py) | Stop hook: Claude can't finish a turn while a source file has changed more recently than its study notes. |
 | [scripts/export_sessions.py](scripts/export_sessions.py) | Exports session transcripts to `docs/ai-sessions/` after every Claude turn. |
 | [docs/ai-sessions/](docs/ai-sessions/) | Full transcripts of every session, including what I asked for and what I changed or rejected. |
 

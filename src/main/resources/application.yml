@@ -1,12 +1,6 @@
-# Spring Boot configuration for the inventory service.
-#
-# Spring: Spring Boot loads this file automatically from the classpath at startup. Anything
-# not set here keeps its auto-configured default.
-#
-# Why: there is deliberately no `spring.datasource.url`, username or password. When running
-# locally, Docker Compose support supplies them from compose.yaml; in tests, Testcontainers'
-# `@ServiceConnection` does. No credentials are written in config files.
+# Study notes: docs/learning/notes/main/resources/application.yml.md
+# Why: no spring.datasource.* here. Docker Compose support (bootRun) and Testcontainers'
+# @ServiceConnection (tests) supply the connection details, so no credentials live in config.
 spring:
   application:
-    # Shows up in log lines and identifies the service.
     name: inventory
