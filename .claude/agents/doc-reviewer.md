@@ -17,7 +17,7 @@ limited to `*.kt`, `*.kts`, `application*.yml` and `application*.properties`.
 If that is empty, review the files in the most recent commit.
 
 Read `CLAUDE.md` first; its "Commenting and documentation standard" section is the rubric.
-Also read `docs/open_api/inventory.yaml` so you can check `// Contract:` comments against it.
+Also read `src/main/resources/openapi/inventory.yaml` so you can check `// Contract:` comments against it.
 
 ## What to check
 

@@ -4,7 +4,7 @@ A small inventory-management REST API built for the Nuuly services assessment. I
 receives stock by SKU, processes purchases without overselling, and reports current
 inventory levels.
 
-The API contract is [docs/open_api/inventory.yaml](docs/open_api/inventory.yaml)
+The API contract is [src/main/resources/openapi/inventory.yaml](src/main/resources/openapi/inventory.yaml)
 (OpenAPI 3.0.3), and the implementation must conform to it exactly. The original brief
 is in [docs/Nuuly_Assessment_Instructions.txt](docs/Nuuly_Assessment_Instructions.txt).
 
@@ -95,8 +95,9 @@ _Commands coming with the first scaffold commit._ The goal is one command to run
 ```text
 .claude/                 Claude Code configuration (hooks, agents, skills) — see below
 CLAUDE.md                Project memory and coding standards for Claude Code
+src/main/resources/
+  openapi/inventory.yaml The OpenAPI contract (source of truth)
 docs/
-  open_api/              The OpenAPI contract (source of truth)
   learning/              Kotlin/Spring concept index and walkthrough logs
   ai-sessions/           Exported transcripts of every AI session on this project
 scripts/                 Hook scripts (branch guard, KDoc check, session export)

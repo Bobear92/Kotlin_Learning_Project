@@ -16,7 +16,7 @@ running `/walkthrough` first. Continue only if he says to.
 
 ## 1. Pin the behavior to the contract
 
-Read `docs/open_api/inventory.yaml` and quote the exact part this feature implements.
+Read `src/main/resources/openapi/inventory.yaml` and quote the exact part this feature implements.
 List the acceptance criteria as a checklist: method + path, request schema and validation,
 every response status with its content type (`application/json` vs `text/plain`), and body shape.
 List any ambiguity the contract leaves open and ask Robert how to resolve it.

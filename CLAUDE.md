@@ -14,7 +14,7 @@ follow-up interview?" as a requirement alongside passing the tests.
 
 ## Source of truth
 
-- **API contract:** [docs/open_api/inventory.yaml](docs/open_api/inventory.yaml). Paths, status codes,
+- **API contract:** [src/main/resources/openapi/inventory.yaml](src/main/resources/openapi/inventory.yaml). Paths, status codes,
   content types and schemas must match it exactly. Error responses (400/404) are
   `text/plain` strings, not JSON. `quantity` in requests has `minimum: 1`.
 - If the contract is ambiguous (e.g. malformed JSON, missing body, SKU id format),
