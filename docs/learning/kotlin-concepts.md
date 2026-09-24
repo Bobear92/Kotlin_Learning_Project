@@ -46,3 +46,13 @@ and `/walkthrough` add rows as new concepts come up.
 | `@JdbcTest` slice | JDBC-only context, no component scan, each test rolled back | [InventoryRepositoryTest.kt](notes/test/inventory/InventoryRepositoryTest.kt.md) |
 | `@AutoConfigureMockMvc` + Kotlin MockMvc DSL | In-process HTTP requests; `mockMvc.get(...).andExpect { }` | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
 | `JsonCompareMode.STRICT` | Exact JSON match: no extra fields, array order matters | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
+| Flyway migrations | `V<n>__<desc>.sql` (two underscores) in `db/migration`, run once at startup, checksummed; wrong names are skipped silently | [V1__create_inventory.sql](notes/main/resources/db/migration/V1__create_inventory.sql.md) |
+
+## Database and API design
+
+| Concept | What it is | First seen |
+| --- | --- | --- |
+| Contract schemas are not tables | OpenAPI schemas describe JSON on the wire; tables describe what's stored | [V1__create_inventory.sql](notes/main/resources/db/migration/V1__create_inventory.sql.md) |
+| Natural vs surrogate key | `sku_id` as the primary key vs a generated `id` plus a unique `sku_id` | [V1__create_inventory.sql](notes/main/resources/db/migration/V1__create_inventory.sql.md) |
+| Constraints as a backstop | `PRIMARY KEY`, `NOT NULL`, `CHECK` protect data even when app code is wrong | [V1__create_inventory.sql](notes/main/resources/db/migration/V1__create_inventory.sql.md) |
+| Identifier case folding | Postgres lowercases unquoted names; use `snake_case` in SQL, `camelCase` in Kotlin | [V1__create_inventory.sql](notes/main/resources/db/migration/V1__create_inventory.sql.md) |

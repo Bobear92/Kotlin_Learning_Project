@@ -61,7 +61,7 @@ Each decision and its reasoning is recorded here once it is made.
 | List order and contents | **Ordered by `sku_id`** (the contract specifies no order; a fixed one keeps responses and tests stable). **Zero-stock SKUs are listed**: a sold-out SKU still exists, and `GET /inventory/{skuId}` returns it with quantity `0`. | Decided 2026-09-24 |
 | Column types | `sku_id TEXT` (exact, case-sensitive match for now), `quantity INTEGER` (Kotlin `Int`). Considered `BIGINT`/`Long`; overflow will be handled when adding stock instead. | Decided 2026-09-24 |
 | Demo seed data | Tests insert their own rows. Whether a running app should start with sample data (e.g. a dev-only Flyway location) is decided once `POST /inventory/{skuId}` exists. | Open |
-| Contract gaps | Malformed or missing JSON body, `quantity` of wrong type, SKU id format/case sensitivity (currently case-sensitive), integer overflow on add | Open |
+| Contract gaps | Malformed or missing JSON body, `quantity` of wrong type, SKU id format/case sensitivity (currently exact, case-sensitive: `W` and `w` are two SKUs; options to decide with `POST`: keep exact match, normalize case in the app, a case-insensitive column, or reject non-canonical SKUs), integer overflow on add | Open |
 
 ### Decision record: PostgreSQL and atomic SQL
 

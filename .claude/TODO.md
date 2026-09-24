@@ -41,7 +41,7 @@ and checks items off as they are done. Newest decisions are recorded in the READ
 - [ ] `GET /inventory`: ordered by `sku_id`, zero-stock SKUs included. Tests written 2026-09-24; Robert writes the code
 - [ ] `/walkthrough` of `GET /inventory`
 - [ ] `GET /inventory/{skuId}`
-- [ ] `POST /inventory/{skuId}` (create or add)
+- [ ] `POST /inventory/{skuId}` (create or add). Decide SKU case sensitivity first (options in the README's contract-gaps row)
 - [ ] `POST /inventory/{skuId}/purchase`
 - [ ] Contract-validation test: check MockMvc responses against inventory.yaml (decided with the
       Controllers decision; do it once there is more than one endpoint to validate)
