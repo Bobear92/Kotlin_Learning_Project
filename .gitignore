@@ -21,3 +21,6 @@ Thumbs.db
 
 # Claude Code per-user settings (shared settings.json stays committed)
 .claude/settings.local.json
+
+# Local marker: Robert is writing production code (see scripts/check_notes.py)
+.claude/coding-in-progress

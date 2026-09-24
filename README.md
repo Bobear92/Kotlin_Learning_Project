@@ -175,7 +175,7 @@ committed so reviewers can see how the AI was directed and checked:
 | File | Purpose |
 | --- | --- |
 | [CLAUDE.md](CLAUDE.md) | Project memory: contract rules, stack, documentation standard, feature workflow. |
-| [.claude/skills/feature](.claude/skills/feature/SKILL.md) | `/feature`: contract check → approved plan → tests + code → build → `/sync-docs` → walkthrough hand-off. |
+| [.claude/skills/feature](.claude/skills/feature/SKILL.md) | `/feature`: contract check → approved plan → Claude writes failing tests → **I write the code, Claude coaches and reviews** → `/sync-docs` → walkthrough hand-off. |
 | [.claude/skills/sync-docs](.claude/skills/sync-docs/SKILL.md) | `/sync-docs`: updates study notes, concept index, README and TODO for whatever code changed, then runs `doc-reviewer`. |
 | [.claude/skills/walkthrough](.claude/skills/walkthrough/SKILL.md) | `/walkthrough`: interactive, file-by-file teaching session with understanding checks, logged to `docs/learning/`. |
 | [.claude/skills/ship](.claude/skills/ship/SKILL.md) | `/ship`: push the branch → open a PR → merge into `main` with a merge commit (never squash). |
@@ -183,6 +183,7 @@ committed so reviewers can see how the AI was directed and checked:
 | [.claude/TODO.md](.claude/TODO.md) | Working task list, including the oversell-protection test plan. |
 | [.claude/settings.json](.claude/settings.json) | Hook configuration for the scripts below. |
 | [scripts/branch_guard.py](scripts/branch_guard.py) | Keeps all work off `main`: flags a session that starts on `main`, blocks edits and commits there, and blocks direct pushes to `main` and squash merges. |
+| [scripts/code_guard.py](scripts/code_guard.py) | Makes Claude Code ask me before Claude writes production code under `src/main/`: I write that code, Claude writes tests and coaches. |
 | [scripts/check_kdoc.py](scripts/check_kdoc.py) | Reports missing KDoc after every edit to a `.kt` file. |
 | [scripts/check_notes.py](scripts/check_notes.py) | Stop hook: Claude can't finish a turn while a source file has changed more recently than its study notes. |
 | [scripts/export_sessions.py](scripts/export_sessions.py) | Exports session transcripts to `docs/ai-sessions/` after every Claude turn. |

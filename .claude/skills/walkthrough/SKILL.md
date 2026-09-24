@@ -10,6 +10,11 @@ Robert is learning Kotlin through this project. He has to understand the code we
 enough to explain and defend it in an interview. Go at his pace. This is a
 conversation, not a lecture.
 
+Robert writes the production code himself (see "Who writes what" in `CLAUDE.md`). For code he
+wrote, flip the roles: ask him to explain each chunk first, then fill gaps, correct
+misconceptions and add the Spring behavior the code doesn't show. For code Claude wrote
+(the tests, and anything written before that rule), explain it as below.
+
 ## 1. Establish scope
 
 - If `$ARGUMENTS` names files, a commit range or a topic, use that.

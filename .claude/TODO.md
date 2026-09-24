@@ -32,6 +32,10 @@ and checks items off as they are done. Newest decisions are recorded in the READ
 - [ ] `V1__create_inventory.sql` migration (table + `CHECK (quantity >= 0)`), with the first feature
 - [ ] `/walkthrough` of the scaffold (build.gradle.kts, compose.yaml, application.yml, the three .kt files)
 
+## Tooling
+
+- [x] `scripts/check_notes.py` no longer waits on stdin when run by hand: hook mode is now an explicit `--hook` flag (2026-09-24)
+
 ## Features (one `/feature` + `/walkthrough` each)
 
 - [ ] `GET /inventory`

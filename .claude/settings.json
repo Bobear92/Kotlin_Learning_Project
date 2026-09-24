@@ -8,7 +8,10 @@
     "PreToolUse": [
       {
         "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash|PowerShell",
-        "hooks": [ { "type": "command", "command": "python \"$CLAUDE_PROJECT_DIR/scripts/branch_guard.py\" pre-tool-use", "timeout": 10 } ]
+        "hooks": [
+          { "type": "command", "command": "python \"$CLAUDE_PROJECT_DIR/scripts/branch_guard.py\" pre-tool-use", "timeout": 10 },
+          { "type": "command", "command": "python \"$CLAUDE_PROJECT_DIR/scripts/code_guard.py\"", "timeout": 10 }
+        ]
       }
     ],
     "PostToolUse": [
@@ -19,7 +22,7 @@
     ],
     "Stop": [
       { "hooks": [ { "type": "command", "command": "python \"$CLAUDE_PROJECT_DIR/scripts/export_sessions.py\"", "timeout": 30 } ] },
-      { "hooks": [ { "type": "command", "command": "python \"$CLAUDE_PROJECT_DIR/scripts/check_notes.py\"", "timeout": 30 } ] }
+      { "hooks": [ { "type": "command", "command": "python \"$CLAUDE_PROJECT_DIR/scripts/check_notes.py\" --hook", "timeout": 30 } ] }
     ]
   }
 }
