@@ -105,7 +105,7 @@ control, multi-instance tests, load tests and property-based tests. The full pla
 container; there is nothing to install or configure by hand.
 
 ```sh
-./gradlew bootRun   # start the API on http://localhost:8080 (Windows: gradlew.bat bootRun)
+./gradlew bootRun   # start the API on http://localhost:8080 (Windows PowerShell: .\gradlew.bat bootRun)
 ./gradlew test      # run all tests, each against a throwaway Postgres container
 ./gradlew build     # compile, test and package build/libs/inventory-0.0.1-SNAPSHOT.jar
 ```

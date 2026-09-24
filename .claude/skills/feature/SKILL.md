@@ -58,7 +58,7 @@ Give a short plan covering:
   Never write the file for him.
 - Explain concepts when he asks or when you see him stuck on one, with the Java equivalent
   when that helps.
-- Run the build (`gradlew.bat build`) when he asks, and explain failures in terms of what his
+- Run the build (`.\gradlew.bat build` in PowerShell) when he asks, and explain failures in terms of what his
   code does. Report results truthfully.
 - The KDoc hook only runs on your edits, so remind him that every non-private declaration he
   writes needs KDoc, plus the `// Study notes:` header line.
