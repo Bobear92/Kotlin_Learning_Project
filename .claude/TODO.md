@@ -29,8 +29,8 @@ and checks items off as they are done. Newest decisions are recorded in the READ
 - [x] Docker Compose file for Postgres; Spring Boot Docker Compose support for `bootRun` (2026-09-23)
 - [x] Testcontainers for tests (`support/TestcontainersConfiguration.kt`) (2026-09-23)
 - [ ] README "Build and run" section verified from a clean clone (verified in the working tree only)
-- [ ] `V1__create_inventory.sql` migration (table + `CHECK (quantity >= 0)`), with the first feature
-- [ ] `/walkthrough` of the scaffold (build.gradle.kts, compose.yaml, application.yml, the three .kt files)
+- [ ] `V1__create_inventory.sql` migration (table + `CHECK (quantity >= 0)`), with the first feature (Robert)
+- [x] `/walkthrough` of the scaffold (build.gradle.kts, compose.yaml, application.yml, the three .kt files) (2026-09-23)
 
 ## Tooling
 
@@ -38,10 +38,14 @@ and checks items off as they are done. Newest decisions are recorded in the READ
 
 ## Features (one `/feature` + `/walkthrough` each)
 
-- [ ] `GET /inventory`
+- [ ] `GET /inventory`: ordered by `sku_id`, zero-stock SKUs included. Tests written 2026-09-24; Robert writes the code
+- [ ] `/walkthrough` of `GET /inventory`
 - [ ] `GET /inventory/{skuId}`
 - [ ] `POST /inventory/{skuId}` (create or add)
 - [ ] `POST /inventory/{skuId}/purchase`
+- [ ] Contract-validation test: check MockMvc responses against inventory.yaml (decided with the
+      Controllers decision; do it once there is more than one endpoint to validate)
+- [ ] Decide on demo seed data for a running app, once `POST /inventory/{skuId}` exists
 - [ ] Error handling: `text/plain` 400/404 bodies exactly as the contract specifies
 
 ## Oversell protection: test plan
@@ -74,6 +78,7 @@ class of bug. Each item below is also a teaching topic for a walkthrough.
 ### Database backstop
 - [ ] Test that the `CHECK (quantity >= 0)` constraint rejects a direct update that would go
       negative, so the database protects the data even if the application has a bug.
+      (test written in `InventoryRepositoryTest` 2026-09-24; passes once Robert's V1 migration exists)
 
 ### Across instances and under load
 - [ ] **Multiple app instances.** Two app instances (or two Spring contexts) against the same

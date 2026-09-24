@@ -22,6 +22,12 @@ and `/walkthrough` add rows as new concepts come up.
 | Expression bodies | `fun f(): T = expr` instead of `{ return expr }` | [TestcontainersConfiguration.kt](notes/test/support/TestcontainersConfiguration.kt.md) |
 | Class references `X::class` | Kotlin's version of Java's `X.class` | [InventoryApplicationTests.kt](notes/test/InventoryApplicationTests.kt.md) |
 | `internal` vs package-private | Kotlin has no package-private; `internal` = same Gradle module | [README](../../README.md#project-layout) |
+| Public by default | No modifier means `public` (Java: package-private); helpers must say `private` | [InventoryRepositoryTest.kt](notes/test/inventory/InventoryRepositoryTest.kt.md) |
+| `@Autowired constructor` | Annotating the primary constructor needs the `constructor` keyword | [InventoryRepositoryTest.kt](notes/test/inventory/InventoryRepositoryTest.kt.md) |
+| Backtick function names | `` fun `reads like a sentence`() `` for test names | [InventoryRepositoryTest.kt](notes/test/inventory/InventoryRepositoryTest.kt.md) |
+| `kotlin.test` assertions | `assertEquals`, `assertTrue`, `assertFailsWith<T> { }` | [InventoryRepositoryTest.kt](notes/test/inventory/InventoryRepositoryTest.kt.md) |
+| Extension functions | `fun MockMvc.get(...)`: a function added to a class from outside it | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
+| Raw strings `"""` | Multi-line strings without escaping; `trimIndent()` to strip indentation | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
 
 ## Spring
 
@@ -36,3 +42,7 @@ and `/walkthrough` add rows as new concepts come up.
 | `@TestConfiguration` + `@Import` | Test-only beans that component scanning skips | [TestcontainersConfiguration.kt](notes/test/support/TestcontainersConfiguration.kt.md) |
 | `@ServiceConnection` | A Testcontainers container supplies DataSource connection details | [TestcontainersConfiguration.kt](notes/test/support/TestcontainersConfiguration.kt.md) |
 | `@SpringBootTest` | Starts the full application context in a test | [InventoryApplicationTests.kt](notes/test/InventoryApplicationTests.kt.md) |
+| Exception translation | SQL errors become `DataAccessException`s, e.g. `DataIntegrityViolationException` | [InventoryRepositoryTest.kt](notes/test/inventory/InventoryRepositoryTest.kt.md) |
+| `@JdbcTest` slice | JDBC-only context, no component scan, each test rolled back | [InventoryRepositoryTest.kt](notes/test/inventory/InventoryRepositoryTest.kt.md) |
+| `@AutoConfigureMockMvc` + Kotlin MockMvc DSL | In-process HTTP requests; `mockMvc.get(...).andExpect { }` | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
+| `JsonCompareMode.STRICT` | Exact JSON match: no extra fields, array order matters | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |

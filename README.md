@@ -12,7 +12,7 @@ is in [docs/Nuuly_Assessment_Instructions.txt](docs/Nuuly_Assessment_Instruction
 
 | Method | Path | Behavior | Responses | Status |
 | --- | --- | --- | --- | --- |
-| `GET` | `/inventory` | List every SKU and its quantity (`[]` when empty) | `200` JSON array | Not started |
+| `GET` | `/inventory` | List every SKU and its quantity (`[]` when empty) | `200` JSON array | Tests written; Robert implementing |
 | `GET` | `/inventory/{skuId}` | Current quantity for one SKU | `200` JSON, `404` text | Not started |
 | `POST` | `/inventory/{skuId}` | Add stock; creates the SKU if it is new | `200` JSON, `400` text | Not started |
 | `POST` | `/inventory/{skuId}/purchase` | Deduct stock, only if enough is on hand | `200` JSON, `400` / `404` text | Not started |
@@ -58,7 +58,10 @@ Each decision and its reasoning is recorded here once it is made.
 | Data-access library | **`JdbcClient`**: explicit SQL, maps to immutable data classes. Considered Spring Data JDBC, Spring Data JPA, Exposed. | Decided 2026-09-23 |
 | Controllers | **Hand-written**, plus a contract-validation test (responses checked against `inventory.yaml`). Considered generating them with `openapi-generator`, but that hides the Spring MVC wiring and is overkill for 4 endpoints. | Decided 2026-09-23 |
 | Schema migrations | **Flyway**: versioned plain-SQL files, run automatically at startup and in tests. Considered Liquibase (XML/YAML changesets, more ceremony) and `schema.sql` (no versioning). | Decided 2026-09-23 |
-| Contract gaps | Malformed or missing JSON body, `quantity` of wrong type, SKU id format/case sensitivity, integer overflow on add | Open |
+| List order and contents | **Ordered by `sku_id`** (the contract specifies no order; a fixed one keeps responses and tests stable). **Zero-stock SKUs are listed**: a sold-out SKU still exists, and `GET /inventory/{skuId}` returns it with quantity `0`. | Decided 2026-09-24 |
+| Column types | `sku_id TEXT` (exact, case-sensitive match for now), `quantity INTEGER` (Kotlin `Int`). Considered `BIGINT`/`Long`; overflow will be handled when adding stock instead. | Decided 2026-09-24 |
+| Demo seed data | Tests insert their own rows. Whether a running app should start with sample data (e.g. a dev-only Flyway location) is decided once `POST /inventory/{skuId}` exists. | Open |
+| Contract gaps | Malformed or missing JSON body, `quantity` of wrong type, SKU id format/case sensitivity (currently case-sensitive), integer overflow on add | Open |
 
 ### Decision record: PostgreSQL and atomic SQL
 
@@ -105,6 +108,15 @@ container; there is nothing to install or configure by hand.
 ./gradlew bootRun   # start the API on http://localhost:8080 (Windows: gradlew.bat bootRun)
 ./gradlew test      # run all tests, each against a throwaway Postgres container
 ./gradlew build     # compile, test and package build/libs/inventory-0.0.1-SNAPSHOT.jar
+```
+
+Try it once the app is running:
+
+```sh
+curl -i http://localhost:8080/inventory
+# HTTP/1.1 200
+# Content-Type: application/json
+# []
 ```
 
 `bootRun` starts Postgres from [compose.yaml](compose.yaml) automatically (Spring Boot's
