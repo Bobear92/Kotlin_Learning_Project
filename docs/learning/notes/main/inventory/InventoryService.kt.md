@@ -23,7 +23,7 @@ import (see the [repository notes](InventoryRepository.kt.md#imports)).
 ### A Spring bean that depends on the repository
 
 ```kotlin
-/** Service class for the get /inventory flow. Use by controller layer and consumes the repository layer. */
+/** Service class for the GET /inventory flow. Used by controller layer and consumes the repository layer. */
 @Service
 class InventoryService(
     private val inventoryRepository: InventoryRepository
@@ -50,7 +50,7 @@ for example for `@Transactional` (see [final by default](../../build.gradle.kts.
 ### `listInventory`
 
 ```kotlin
-/** Function that returns the list of sorted inventory items. */
+/** Returns every inventory item, sorted by SKU id. */
 fun listInventory() : List<InventoryItem> = inventoryRepository.findAll()
 ```
 
@@ -59,6 +59,11 @@ the function's result is the value of `inventoryRepository.findAll()`. The decla
 `List<InventoryItem>` is read-only and non-null, the same type the repository returns (see
 [read-only `List`](InventoryRepository.kt.md#findall-the-function-signature)). The space before
 the `:` is unusual but legal. Kotlin ignores it.
+
+**KDoc:** it leads with what the function does. The sorting isn't done here, it happens in the
+repository's `ORDER BY sku_id`. The service states the order anyway, because it's part of what this
+function returns: the README decision fixes `GET /inventory` to SKU id order (the contract itself sets
+none), and `InventoryControllerTest` checks that order strictly.
 
 **Why no error handling:** Robert asked whether this function needs a `try`/`catch`. It doesn't:
 - **No data** is not an error. The repository returns an empty list, which becomes `[]`, and the

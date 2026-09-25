@@ -15,7 +15,7 @@ It is also the shape of the contract's `InventoryItem` schema.
 ### The KDoc and the class
 
 ```kotlin
-/** One item in the inventory and how much there is of it from the repository for the GET /inventory flow. */
+/** One SKU and its stock quantity; returned by the repository and serialized as JSON by GET /inventory. */
 data class InventoryItem(val skuId: String, val quantity: Int)
 ```
 

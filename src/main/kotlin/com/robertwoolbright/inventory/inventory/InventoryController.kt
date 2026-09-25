@@ -7,15 +7,15 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
 
-/** Controller for the inventory Flow. At the top layer, the controller layer, and calls the service layer. */
+/** Controller for the inventory flow. HTTP entry point for the inventory endpoints; calls InventoryService. */
 @RestController
 @RequestMapping("/inventory")
 class InventoryController (
     private val inventoryService: InventoryService
 ){
-    // Contract: The below mapping maps to the Get /Inventory endpoint in the inventory.yaml contract. The endpoint is a simple and returns all inventory.
+    // Contract: paths./inventory.get — 200 application/json array of InventoryItem, [] when empty.
     
-    /** A function that calls inventory service and returns a list of inventory items.*/
+    /** Returns every SKU and its quantity for GET /inventory.*/
     @GetMapping
-    fun findAllInventory(): List<InventoryItem> = inventoryService.listInventory()
+    fun listInventory(): List<InventoryItem> = inventoryService.listInventory()
 }

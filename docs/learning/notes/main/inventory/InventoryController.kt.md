@@ -26,7 +26,7 @@ on the classpath through `spring-boot-starter-webmvc` (see [build.gradle.kts](..
 ### A REST controller mapped to `/inventory`
 
 ```kotlin
-/** Controller for the inventory Flow. At the top layer, the controller layer, and calls the service layer. */
+/** Controller for the inventory flow. HTTP entry point for the inventory endpoints; calls InventoryService. */
 @RestController
 @RequestMapping("/inventory")
 class InventoryController (
@@ -58,13 +58,18 @@ each function. It's the usual Spring pattern, and it will fit the next endpoints
 ### The `// Contract:` comment
 
 ```kotlin
-// Contract: The below mapping maps to the Get /Inventory endpoint in the inventory.yaml contract. The endpoint is a simple and returns all inventory.
+// Contract: paths./inventory.get — 200 application/json array of InventoryItem, [] when empty.
 ```
 
-**Contract:** this is the file's `// Contract:` comment: it names the part of the API contract the
-function below exists for. The part of `inventory.yaml` the function satisfies is `paths./inventory.get`
-(`operationId: listInventory`): a `200` with `application/json`, a body that is an array of
-`InventoryItem`, and "If no SKUs exist, returns an empty array."
+**Contract:** this is the file's `// Contract:` comment. It names the exact part of the API contract
+the function below exists for, so a reviewer can jump straight to it in `inventory.yaml`:
+`paths./inventory.get` (`operationId: listInventory`) promises a `200` with `application/json`, a
+body that is an array of `InventoryItem`, and "If no SKUs exist, returns an empty array." The
+comment compresses all three into one line.
+
+**Why this wording:** Robert's first version described the endpoint in prose ("The endpoint is a
+simple and returns all inventory"). When the code was reviewed (2026-09-25), it was rewritten to name the contract path
+and the rules, because a `// Contract:` comment is a pointer into the YAML, not a description.
 
 **Placement:** it sits above the KDoc, separated by a blank line, so the KDoc stays directly on top
 of the function it documents.
@@ -72,9 +77,9 @@ of the function it documents.
 ### `GET /inventory`
 
 ```kotlin
-/** A function that calls inventory service and returns a list of inventory items.*/
+/** Returns every SKU and its quantity for GET /inventory.*/
 @GetMapping
-fun findAllInventory(): List<InventoryItem> = inventoryService.listInventory()
+fun listInventory(): List<InventoryItem> = inventoryService.listInventory()
 ```
 
 **Spring (`@GetMapping`):** short for `@RequestMapping(method = [RequestMethod.GET])`. With no
@@ -85,8 +90,16 @@ A `@GetMapping` also answers `HEAD` (same status and headers, no body), and Spri
 matches paths exactly, and trailing-slash matching has been off by default since Spring 6, so
 `GET /inventory/` is a `404`.
 
-The function's **name** doesn't matter to Spring. Only the annotation does. `findAllInventory`,
-`list` or `getInventory` would all be routed the same way.
+The function's **name** doesn't matter to Spring. Only the annotation does. `listInventory`,
+`list` or `getInventory` would all be routed the same way. Robert first called it
+`findAllInventory` and renamed it to `listInventory` in review, to match the contract's
+`operationId: listInventory` and the service function. One name then runs from the YAML through
+the controller to the service, which makes the code easy to trace. The tests call the endpoint by
+its URL through MockMvc (a simulated HTTP request), never the function by name, so the rename didn't
+touch them.
+
+**KDoc style:** the KDoc starts with a verb and says what the function does ("Returns every SKU…"),
+not what kind of thing it is ("A function that…"). The signature already shows it's a function.
 
 **Spring (what happens after `return`):**
 1. The `DispatcherServlet` receives the request and finds this function through its mapping.

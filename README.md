@@ -12,7 +12,7 @@ is in [docs/Nuuly_Assessment_Instructions.txt](docs/Nuuly_Assessment_Instruction
 
 | Method | Path | Behavior | Responses | Status |
 | --- | --- | --- | --- | --- |
-| `GET` | `/inventory` | List every SKU and its quantity (`[]` when empty) | `200` JSON array | Implemented; tests green (in review) |
+| `GET` | `/inventory` | List every SKU and its quantity (`[]` when empty) | `200` JSON array | Implemented; tests green; reviewed (walkthrough next) |
 | `GET` | `/inventory/{skuId}` | Current quantity for one SKU | `200` JSON, `404` text | Not started |
 | `POST` | `/inventory/{skuId}` | Add stock; creates the SKU if it is new | `200` JSON, `400` text | Not started |
 | `POST` | `/inventory/{skuId}/purchase` | Deduct stock, only if enough is on hand | `200` JSON, `400` / `404` text | Not started |
