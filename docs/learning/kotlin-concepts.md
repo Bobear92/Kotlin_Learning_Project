@@ -33,6 +33,8 @@ and `/walkthrough` add rows as new concepts come up.
 | Lambdas, `_` and SAM conversion | `{ rs, _ -> ... }` stands in for Java's single-method `RowMapper`; `_` = unused parameter | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
 | KDoc vs `// Why:` | KDoc (`/** */`) says what, for callers, shown on hover; `// Why:` says why, for maintainers | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
 | JSpecify nullability from Java | Spring 7's `@Nullable` makes `query(Class)` yield `T?`; a row-mapper lambda keeps `T` non-null | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| `data class` | Generated `equals`/`hashCode`/`toString`/`copy`/`componentN` from constructor properties; Kotlin's Java `record` | [InventoryItem.kt](notes/main/inventory/InventoryItem.kt.md) |
+| No checked exceptions | Kotlin has no `throws` clause; unchecked `DataAccessException` travels up to a `500` | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
 
 ## Spring
 
@@ -55,6 +57,10 @@ and `/walkthrough` add rows as new concepts come up.
 | Component scanning and stereotypes | `@Repository`/`@Service`/`@RestController` make scanned classes beans; `@Import` registers one by hand | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
 | Constructor injection | A single constructor is autowired without `@Autowired`; beans are created at startup | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
 | `JdbcClient` query chain | `sql(...)` prepares, `query { row mapper }` maps, `list()` runs and collects | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| `@RestController` vs `@Controller` | `@RestController` = `@Controller` + `@ResponseBody`: return values are written as the body, not rendered as views | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
+| `@RequestMapping` + `@GetMapping` | Class-level base path plus method-level mappings; the function name doesn't matter | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
+| Message converters (Jackson) | A `@ResponseBody` value is written as JSON; Kotlin property names become JSON keys | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
+| The service layer | Business rules and error mapping sit between HTTP (controller) and SQL (repository) | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
 
 ## Database and API design
 
