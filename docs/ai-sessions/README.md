@@ -21,4 +21,7 @@ from 01 each day in the order sessions were started.
 | [2026-09-23_02](2026-09-23/2026-09-23_02.md) | Testing new entry organization method | 2026-09-23 13:51 | 2 |
 | [2026-09-23_03](2026-09-23/2026-09-23_03.md) | Nuuly inventory Kotlin master class | 2026-09-23 14:05 | 8 |
 | [2026-09-23_04](2026-09-23/2026-09-23_04.md) | Project structure and scaffolding | 2026-09-23 14:44 | 22 |
-| [2026-09-24_01](2026-09-24/2026-09-24_01.md) | Inventory list endpoint | 2026-09-24 16:13 | 19 |
+| [2026-09-24_01](2026-09-24/2026-09-24_01.md) | Inventory list endpoint | 2026-09-24 16:13 | 20 |
+| [2026-09-24_02](2026-09-24/2026-09-24_02.md) | Continue with step 2 | 2026-09-24 17:31 | 7 |
+| [2026-09-24_03](2026-09-24/2026-09-24_03.md) | Inventory item step 3 | 2026-09-24 21:03 | 23 |
+| [2026-09-24_04](2026-09-24/2026-09-24_04.md) | InventoryRepository step 4 | 2026-09-25 03:47 | 2 |
