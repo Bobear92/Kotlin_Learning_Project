@@ -22,6 +22,21 @@ and `/walkthrough` add rows as new concepts come up.
 | Expression bodies | `fun f(): T = expr` instead of `{ return expr }` | [TestcontainersConfiguration.kt](notes/test/support/TestcontainersConfiguration.kt.md) |
 | Class references `X::class` | Kotlin's version of Java's `X.class` | [InventoryApplicationTests.kt](notes/test/InventoryApplicationTests.kt.md) |
 | `internal` vs package-private | Kotlin has no package-private; `internal` = same Gradle module | [README](../../README.md#project-layout) |
+| Public by default | No modifier means `public` (Java: package-private); helpers must say `private` | [InventoryRepositoryTest.kt](notes/test/inventory/InventoryRepositoryTest.kt.md) |
+| `@Autowired constructor` | Annotating the primary constructor needs the `constructor` keyword | [InventoryRepositoryTest.kt](notes/test/inventory/InventoryRepositoryTest.kt.md) |
+| Backtick function names | `` fun `reads like a sentence`() `` for test names | [InventoryRepositoryTest.kt](notes/test/inventory/InventoryRepositoryTest.kt.md) |
+| `kotlin.test` assertions | `assertEquals`, `assertTrue`, `assertFailsWith<T> { }` | [InventoryRepositoryTest.kt](notes/test/inventory/InventoryRepositoryTest.kt.md) |
+| Extension functions | `fun MockMvc.get(...)`: a function added to a class from outside it | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
+| Raw strings `"""` | Multi-line strings without escaping; `trimIndent()` to strip indentation | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
+| Primary constructor properties | `class X(private val dep: Dep)`: declares and assigns a property in the constructor | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| Read-only `List` vs `MutableList` | `List` has no `add`/`remove`; callers get a snapshot | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| Lambdas, `_` and SAM conversion | `{ rs, _ -> ... }` stands in for Java's single-method `RowMapper`; `_` = unused parameter | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| A lambda's last expression is its return value | `.query { }` / `.map { }` call the lambda once per element and collect what it returns | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| KDoc vs `// Why:` | KDoc (`/** */`) says what, for callers, shown on hover; `// Why:` says why, for maintainers | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| JSpecify nullability from Java | Spring 7's `@Nullable` makes `query(Class)` yield `T?`; a row-mapper lambda keeps `T` non-null | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| `data class` | Generated `equals`/`hashCode`/`toString`/`copy`/`componentN` from constructor properties; Kotlin's Java `record` | [InventoryItem.kt](notes/main/inventory/InventoryItem.kt.md) |
+| `==` vs `===`, and `copy` | `==` calls `equals` (value equality for data classes); `===` is identity. `copy` returns a new object and leaves the original alone | [InventoryItem.kt](notes/main/inventory/InventoryItem.kt.md) |
+| No checked exceptions | Kotlin has no `throws` clause; unchecked `DataAccessException` travels up to a `500` | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
 
 ## Spring
 
@@ -36,3 +51,26 @@ and `/walkthrough` add rows as new concepts come up.
 | `@TestConfiguration` + `@Import` | Test-only beans that component scanning skips | [TestcontainersConfiguration.kt](notes/test/support/TestcontainersConfiguration.kt.md) |
 | `@ServiceConnection` | A Testcontainers container supplies DataSource connection details | [TestcontainersConfiguration.kt](notes/test/support/TestcontainersConfiguration.kt.md) |
 | `@SpringBootTest` | Starts the full application context in a test | [InventoryApplicationTests.kt](notes/test/InventoryApplicationTests.kt.md) |
+| Exception translation | SQL errors become `DataAccessException`s, e.g. `DataIntegrityViolationException` | [InventoryRepositoryTest.kt](notes/test/inventory/InventoryRepositoryTest.kt.md) |
+| `@JdbcTest` slice | JDBC-only context, no component scan, each test rolled back | [InventoryRepositoryTest.kt](notes/test/inventory/InventoryRepositoryTest.kt.md) |
+| `@AutoConfigureMockMvc` + Kotlin MockMvc DSL | In-process HTTP requests; `mockMvc.get(...).andExpect { }` | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
+| `JsonCompareMode.STRICT` | Exact JSON match: no extra fields, array order matters | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
+| Flyway migrations | `V<n>__<desc>.sql` (two underscores) in `db/migration`, run once at startup, checksummed; wrong names are skipped silently | [V1__create_inventory.sql](notes/main/resources/db/migration/V1__create_inventory.sql.md) |
+| Migrations are changes, not snapshots | A schema change is a new `V2__` with `ALTER TABLE`; the schema is the whole V1→Vn chain | [V1__create_inventory.sql](notes/main/resources/db/migration/V1__create_inventory.sql.md) |
+| Component scanning and stereotypes | `@Repository`/`@Service`/`@RestController` make scanned classes beans; `@Import` registers one by hand | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| Constructor injection | A single constructor is autowired without `@Autowired`; beans are created at startup | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| `JdbcClient` query chain | `sql(...)` prepares, `query { row mapper }` maps, `list()` runs and collects | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| `@RestController` vs `@Controller` | `@RestController` = `@Controller` + `@ResponseBody`: return values are written as the body, not rendered as views | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
+| `@RequestMapping` + `@GetMapping` | Class-level base path plus method-level mappings; the function name doesn't matter | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
+| Message converters (Jackson) | A `@ResponseBody` value is written as JSON; Kotlin property names become JSON keys | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
+| The service layer | Business rules and error mapping sit between HTTP (controller) and SQL (repository) | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
+| Singleton beans and threads | One bean instance, built at startup, serves every request thread at once, so beans must be stateless | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
+
+## Database and API design
+
+| Concept | What it is | First seen |
+| --- | --- | --- |
+| Contract schemas are not tables | OpenAPI schemas describe JSON on the wire; tables describe what's stored | [V1__create_inventory.sql](notes/main/resources/db/migration/V1__create_inventory.sql.md) |
+| Natural vs surrogate key | `sku_id` as the primary key vs a generated `id` plus a unique `sku_id` | [V1__create_inventory.sql](notes/main/resources/db/migration/V1__create_inventory.sql.md) |
+| Constraints as a backstop | `PRIMARY KEY`, `NOT NULL`, `CHECK` protect data even when app code is wrong | [V1__create_inventory.sql](notes/main/resources/db/migration/V1__create_inventory.sql.md) |
+| Identifier case folding | Postgres lowercases unquoted names; use `snake_case` in SQL, `camelCase` in Kotlin | [V1__create_inventory.sql](notes/main/resources/db/migration/V1__create_inventory.sql.md) |

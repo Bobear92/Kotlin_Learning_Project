@@ -20,7 +20,7 @@ class InventoryApplicationTests {
 **Spring: `@SpringBootTest`.** Searches up the package tree for a `@SpringBootConfiguration` class
 (ours gets it through `@SpringBootApplication`), then
 starts the *full* application context, the same one `main` builds. (Test "slices" such as
-`@WebMvcTest` start only part of it; we'll use those for controller tests.) Here there's no web
+`@WebMvcTest` or `@JdbcTest` start only part of it; see [InventoryRepositoryTest.kt](inventory/InventoryRepositoryTest.kt.md).) Here there's no web
 server, because `@SpringBootTest` uses a mock web environment unless told otherwise.
 
 **Spring: `@Import`.** Adds the Postgres container from `support/` to this context. Without it

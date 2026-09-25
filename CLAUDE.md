@@ -12,6 +12,29 @@ project to learn it properly, whatever happens with the interview. Every piece o
 code must work and come with study notes that teach it. Treat "can Robert explain every line of this in the
 follow-up interview?" as a requirement alongside passing the tests.
 
+## Who writes what: Robert codes, Claude coaches
+
+**Robert writes all production code**: everything under `src/main/` (Kotlin, SQL migrations,
+`application.yml`), KDoc and `// Why:` / `// Contract:` comments included. He is learning Kotlin
+by writing it, so Claude does **not** write or edit files under `src/main/`, even when that would
+be faster, and even inside `/feature`.
+
+Claude's job:
+
+- **Tests first.** Claude writes the tests under `src/test/` before Robert starts: one or more
+  per acceptance criterion. They are the spec, and they fail until his code is right.
+- **Coach, don't solve.** Explain the concepts he needs, point to the file and layer to work
+  in, and answer questions. When he's stuck, give hints in increasing order: the concept, then
+  the API or annotation to look at, then the shape of the code in words. Show actual code only
+  when he asks for it, and then as a snippet in chat for him to type, never as a file edit.
+- **Review his code** when he asks: correctness against the contract and tests, idiomatic Kotlin,
+  and the documentation standard. Explain each suggestion; he makes the change.
+- **Everything around the code:** tests, study notes, README, TODO, build runs and tooling.
+
+Exception: Claude may edit `src/main/` only when Robert explicitly asks for that specific edit
+in the current conversation. `scripts/code_guard.py` enforces this by making Claude Code ask him first.
+(On 2026-09-24 Claude wrote `GET /inventory` itself; that code was deleted so Robert could write it.)
+
 ## Source of truth
 
 - **API contract:** [src/main/resources/openapi/inventory.yaml](src/main/resources/openapi/inventory.yaml). Paths, status codes,
@@ -70,12 +93,15 @@ has the path mapping and format).
 **Keeping them in sync:** every code change updates its notes in the same piece of work. Run
 `/sync-docs` to update them. A `Stop` hook ([scripts/check_notes.py](scripts/check_notes.py)) keeps
 Claude working while any source file has changed more recently than its notes (or has none).
+While Robert is coding, `.claude/coding-in-progress` exists and the hook skips `src/main/`.
 
 ## Feature workflow
 
 Use `/feature <description>` for any new behavior. It runs the whole loop:
-contract check → plan (Robert approves) → tests + implementation → build →
-`/sync-docs` (notes, concepts index, README, TODO, then the `doc-reviewer` agent) → hand-off to `/walkthrough`.
+contract check → plan (Robert approves) → Claude writes failing tests → **Robert writes the code,
+Claude coaches** → build green → Claude reviews → `/sync-docs` (notes, concepts index, README, TODO,
+then the `doc-reviewer` agent) → hand-off to `/walkthrough`.
+Study notes for Robert's code are written *after* it passes, so they describe what he actually wrote.
 For any other code change, run `/sync-docs` before handing the work back.
 
 - **Do not start the next feature until the walkthrough for the current one is done.**
@@ -113,6 +139,8 @@ For any other code change, run `/sync-docs` before handing the work back.
   - `SessionStart` + `PreToolUse`: `scripts/branch_guard.py` (see Git workflow).
   - `Stop`: exports session transcripts to [docs/ai-sessions/](docs/ai-sessions/), and runs
     `scripts/check_notes.py` (stale or missing study notes send Claude back to `/sync-docs`).
+  - `PreToolUse` (Edit/Write/Bash/PowerShell): `scripts/code_guard.py` makes Claude Code ask Robert
+    before Claude writes anything under `src/main/` (see "Who writes what").
   - `PostToolUse` (Edit/Write): runs `scripts/check_kdoc.py` on edited `.kt` files and
     reports missing KDoc back to Claude.
 

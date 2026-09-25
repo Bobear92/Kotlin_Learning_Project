@@ -12,6 +12,9 @@ documentation is worse than missing documentation**, because Robert will learn f
 
 ## 1. Find what changed
 
+First delete `.claude/coding-in-progress` if it exists (Robert has finished coding; the notes
+check must cover `src/main/` again).
+
 If `$ARGUMENTS` names files, use those. Otherwise:
 
 ```sh

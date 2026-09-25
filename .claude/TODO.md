@@ -29,15 +29,23 @@ and checks items off as they are done. Newest decisions are recorded in the READ
 - [x] Docker Compose file for Postgres; Spring Boot Docker Compose support for `bootRun` (2026-09-23)
 - [x] Testcontainers for tests (`support/TestcontainersConfiguration.kt`) (2026-09-23)
 - [ ] README "Build and run" section verified from a clean clone (verified in the working tree only)
-- [ ] `V1__create_inventory.sql` migration (table + `CHECK (quantity >= 0)`), with the first feature
-- [ ] `/walkthrough` of the scaffold (build.gradle.kts, compose.yaml, application.yml, the three .kt files)
+- [x] `V1__create_inventory.sql` migration (table + `CHECK (quantity >= 0)`), written by Robert (2026-09-24)
+- [x] `/walkthrough` of the scaffold (build.gradle.kts, compose.yaml, application.yml, the three .kt files) (2026-09-23)
+
+## Tooling
+
+- [x] `scripts/check_notes.py` no longer waits on stdin when run by hand: hook mode is now an explicit `--hook` flag (2026-09-24)
 
 ## Features (one `/feature` + `/walkthrough` each)
 
-- [ ] `GET /inventory`
+- [ ] `GET /inventory`: ordered by `sku_id`, zero-stock SKUs included. Tests written 2026-09-24; Robert writes the code. Done: migration, `InventoryItem`, repository (4/4 green), service, controller (build 7/7 green, 2026-09-25); study notes written 2026-09-25; Claude's review done and Robert's KDoc/`// Contract:` fixes plus controller rename to `listInventory` (2026-09-25). Walkthrough done 2026-09-25. Next: `/ship`
+- [x] `/walkthrough` of `GET /inventory` (2026-09-25)
 - [ ] `GET /inventory/{skuId}`
-- [ ] `POST /inventory/{skuId}` (create or add)
+- [ ] `POST /inventory/{skuId}` (create or add). Decide SKU case sensitivity first (options in the README's contract-gaps row)
 - [ ] `POST /inventory/{skuId}/purchase`
+- [ ] Contract-validation test: check MockMvc responses against inventory.yaml (decided with the
+      Controllers decision; do it once there is more than one endpoint to validate)
+- [ ] Decide on demo seed data for a running app, once `POST /inventory/{skuId}` exists
 - [ ] Error handling: `text/plain` 400/404 bodies exactly as the contract specifies
 
 ## Oversell protection: test plan
@@ -70,6 +78,7 @@ class of bug. Each item below is also a teaching topic for a walkthrough.
 ### Database backstop
 - [ ] Test that the `CHECK (quantity >= 0)` constraint rejects a direct update that would go
       negative, so the database protects the data even if the application has a bug.
+      (test written in `InventoryRepositoryTest` 2026-09-24; passes once Robert's V1 migration exists)
 
 ### Across instances and under load
 - [ ] **Multiple app instances.** Two app instances (or two Spring contexts) against the same

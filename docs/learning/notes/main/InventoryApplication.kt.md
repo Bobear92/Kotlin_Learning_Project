@@ -36,7 +36,7 @@ class InventoryApplication
 | `@EnableAutoConfiguration` | Configure whatever the classpath implies: Tomcat because Web MVC is present, a `DataSource` because JDBC + the Postgres driver are, Flyway, Jackson… |
 | `@ComponentScan` | Find `@Component`, `@Service`, `@Repository` and `@RestController` classes **in this package and its sub-packages**, and create them as beans. |
 
-That scan is why the file lives at `com.robertwoolbright.inventory`: the future
+That scan is why the file lives at `com.robertwoolbright.inventory`: the
 `inventory.InventoryController` sits below it and gets found automatically.
 
 **Kotlin:** a class with no body needs no `{}`. Spring never calls anything on this class; it

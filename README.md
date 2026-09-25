@@ -12,7 +12,7 @@ is in [docs/Nuuly_Assessment_Instructions.txt](docs/Nuuly_Assessment_Instruction
 
 | Method | Path | Behavior | Responses | Status |
 | --- | --- | --- | --- | --- |
-| `GET` | `/inventory` | List every SKU and its quantity (`[]` when empty) | `200` JSON array | Not started |
+| `GET` | `/inventory` | List every SKU and its quantity (`[]` when empty) | `200` JSON array | Implemented; tests green; reviewed and walked through |
 | `GET` | `/inventory/{skuId}` | Current quantity for one SKU | `200` JSON, `404` text | Not started |
 | `POST` | `/inventory/{skuId}` | Add stock; creates the SKU if it is new | `200` JSON, `400` text | Not started |
 | `POST` | `/inventory/{skuId}/purchase` | Deduct stock, only if enough is on hand | `200` JSON, `400` / `404` text | Not started |
@@ -58,7 +58,10 @@ Each decision and its reasoning is recorded here once it is made.
 | Data-access library | **`JdbcClient`**: explicit SQL, maps to immutable data classes. Considered Spring Data JDBC, Spring Data JPA, Exposed. | Decided 2026-09-23 |
 | Controllers | **Hand-written**, plus a contract-validation test (responses checked against `inventory.yaml`). Considered generating them with `openapi-generator`, but that hides the Spring MVC wiring and is overkill for 4 endpoints. | Decided 2026-09-23 |
 | Schema migrations | **Flyway**: versioned plain-SQL files, run automatically at startup and in tests. Considered Liquibase (XML/YAML changesets, more ceremony) and `schema.sql` (no versioning). | Decided 2026-09-23 |
-| Contract gaps | Malformed or missing JSON body, `quantity` of wrong type, SKU id format/case sensitivity, integer overflow on add | Open |
+| List order and contents | **Ordered by `sku_id`** (the contract specifies no order; a fixed one keeps responses and tests stable). **Zero-stock SKUs are listed**: a sold-out SKU still exists, and `GET /inventory/{skuId}` returns it with quantity `0`. | Decided 2026-09-24 |
+| Column types | `sku_id TEXT` (exact, case-sensitive match for now), `quantity INTEGER` (Kotlin `Int`). Considered `BIGINT`/`Long`; overflow will be handled when adding stock instead. | Decided 2026-09-24 |
+| Demo seed data | Tests insert their own rows. Whether a running app should start with sample data (e.g. a dev-only Flyway location) is decided once `POST /inventory/{skuId}` exists. | Open |
+| Contract gaps | Malformed or missing JSON body, `quantity` of wrong type, SKU id format/case sensitivity (currently exact, case-sensitive: `W` and `w` are two SKUs; options to decide with `POST`: keep exact match, normalize case in the app, a case-insensitive column, or reject non-canonical SKUs), integer overflow on add | Open |
 
 ### Decision record: PostgreSQL and atomic SQL
 
@@ -102,9 +105,18 @@ control, multi-instance tests, load tests and property-based tests. The full pla
 container; there is nothing to install or configure by hand.
 
 ```sh
-./gradlew bootRun   # start the API on http://localhost:8080 (Windows: gradlew.bat bootRun)
+./gradlew bootRun   # start the API on http://localhost:8080 (Windows PowerShell: .\gradlew.bat bootRun)
 ./gradlew test      # run all tests, each against a throwaway Postgres container
 ./gradlew build     # compile, test and package build/libs/inventory-0.0.1-SNAPSHOT.jar
+```
+
+Try it once the app is running:
+
+```sh
+curl -i http://localhost:8080/inventory
+# HTTP/1.1 200
+# Content-Type: application/json
+# []
 ```
 
 `bootRun` starts Postgres from [compose.yaml](compose.yaml) automatically (Spring Boot's
@@ -175,7 +187,7 @@ committed so reviewers can see how the AI was directed and checked:
 | File | Purpose |
 | --- | --- |
 | [CLAUDE.md](CLAUDE.md) | Project memory: contract rules, stack, documentation standard, feature workflow. |
-| [.claude/skills/feature](.claude/skills/feature/SKILL.md) | `/feature`: contract check → approved plan → tests + code → build → `/sync-docs` → walkthrough hand-off. |
+| [.claude/skills/feature](.claude/skills/feature/SKILL.md) | `/feature`: contract check → approved plan → Claude writes failing tests → **I write the code, Claude coaches and reviews** → `/sync-docs` → walkthrough hand-off. |
 | [.claude/skills/sync-docs](.claude/skills/sync-docs/SKILL.md) | `/sync-docs`: updates study notes, concept index, README and TODO for whatever code changed, then runs `doc-reviewer`. |
 | [.claude/skills/walkthrough](.claude/skills/walkthrough/SKILL.md) | `/walkthrough`: interactive, file-by-file teaching session with understanding checks, logged to `docs/learning/`. |
 | [.claude/skills/ship](.claude/skills/ship/SKILL.md) | `/ship`: push the branch → open a PR → merge into `main` with a merge commit (never squash). |
@@ -183,6 +195,7 @@ committed so reviewers can see how the AI was directed and checked:
 | [.claude/TODO.md](.claude/TODO.md) | Working task list, including the oversell-protection test plan. |
 | [.claude/settings.json](.claude/settings.json) | Hook configuration for the scripts below. |
 | [scripts/branch_guard.py](scripts/branch_guard.py) | Keeps all work off `main`: flags a session that starts on `main`, blocks edits and commits there, and blocks direct pushes to `main` and squash merges. |
+| [scripts/code_guard.py](scripts/code_guard.py) | Makes Claude Code ask me before Claude writes production code under `src/main/`: I write that code, Claude writes tests and coaches. |
 | [scripts/check_kdoc.py](scripts/check_kdoc.py) | Reports missing KDoc after every edit to a `.kt` file. |
 | [scripts/check_notes.py](scripts/check_notes.py) | Stop hook: Claude can't finish a turn while a source file has changed more recently than its study notes. |
 | [scripts/export_sessions.py](scripts/export_sessions.py) | Exports session transcripts to `docs/ai-sessions/` after every Claude turn. |

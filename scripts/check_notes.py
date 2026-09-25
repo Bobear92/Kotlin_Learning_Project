@@ -17,7 +17,12 @@ Claude runs /sync-docs. It also reports notes whose source file no longer exists
 To avoid an endless loop, it never blocks twice in a row: when Claude Code says a Stop hook
 already sent Claude back to work (`stop_hook_active`), the script lets the turn end.
 
-Can also be run by hand, for example as a pre-ship check:  python scripts/check_notes.py
+While Robert is writing production code (the marker file .claude/coding-in-progress exists,
+created by /feature and removed by /sync-docs), files under src/main/ and their notes are
+skipped: notes for his code are written once it passes, not while it's half-finished.
+
+settings.json runs it with --hook, which reads the hook payload from stdin. Run it by hand
+without the flag, for example as a pre-ship check:  python scripts/check_notes.py
 (exit 1 when something is stale).
 """
 
@@ -30,6 +35,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 NOTES = Path("docs/learning/notes")
+CODING_MARKER = Path(".claude/coding-in-progress")
 PACKAGE = "com/robertwoolbright/inventory/"
 
 # (source prefix, notes prefix, which files under the prefix count as source)
@@ -96,10 +102,12 @@ def last_change(path: str, dirty: set[str]) -> float | None:
     return float(committed) if committed else full.stat().st_mtime
 
 
-def find_problems() -> list[str]:
+def find_problems(skip_main: bool = False) -> list[str]:
     dirty = dirty_paths()
     tracked = set(git("ls-files").splitlines())
     sources = sorted(p for p in tracked | dirty if notes_path(p) and (ROOT / p).is_file())
+    if skip_main:
+        sources = [p for p in sources if not p.startswith("src/main/")]
 
     problems = []
     expected_notes = set()
@@ -119,13 +127,15 @@ def find_problems() -> list[str]:
     if notes_dir.is_dir():
         for md in sorted(notes_dir.rglob("*.md")):
             rel = md.relative_to(ROOT).as_posix()
+            if skip_main and rel.startswith(f"{NOTES.as_posix()}/main/"):
+                continue
             if md.name != "README.md" and rel not in expected_notes:
                 problems.append(f"orphan notes:  {rel} (its source file is gone; delete or move it)")
     return problems
 
 
 def main() -> int:
-    hook_mode = not sys.stdin.isatty()
+    hook_mode = "--hook" in sys.argv[1:]
     if hook_mode:
         try:
             payload = json.load(sys.stdin)
@@ -134,7 +144,10 @@ def main() -> int:
         if payload.get("stop_hook_active"):
             return 0
 
-    problems = find_problems()
+    coding = (ROOT / CODING_MARKER).is_file()
+    if coding and not hook_mode:
+        print(f"note: {CODING_MARKER} exists, so src/main/ files are skipped (Robert is coding)", file=sys.stderr)
+    problems = find_problems(skip_main=coding)
     if not problems:
         return 0
     print(
