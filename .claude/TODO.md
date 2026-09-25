@@ -29,7 +29,7 @@ and checks items off as they are done. Newest decisions are recorded in the READ
 - [x] Docker Compose file for Postgres; Spring Boot Docker Compose support for `bootRun` (2026-09-23)
 - [x] Testcontainers for tests (`support/TestcontainersConfiguration.kt`) (2026-09-23)
 - [ ] README "Build and run" section verified from a clean clone (verified in the working tree only)
-- [ ] `V1__create_inventory.sql` migration (table + `CHECK (quantity >= 0)`), with the first feature (Robert)
+- [x] `V1__create_inventory.sql` migration (table + `CHECK (quantity >= 0)`), written by Robert (2026-09-24)
 - [x] `/walkthrough` of the scaffold (build.gradle.kts, compose.yaml, application.yml, the three .kt files) (2026-09-23)
 
 ## Tooling
@@ -38,7 +38,7 @@ and checks items off as they are done. Newest decisions are recorded in the READ
 
 ## Features (one `/feature` + `/walkthrough` each)
 
-- [ ] `GET /inventory`: ordered by `sku_id`, zero-stock SKUs included. Tests written 2026-09-24; Robert writes the code
+- [ ] `GET /inventory`: ordered by `sku_id`, zero-stock SKUs included. Tests written 2026-09-24; Robert writes the code. Done: migration, `InventoryItem`, repository (4/4 green). Next: service
 - [ ] `/walkthrough` of `GET /inventory`
 - [ ] `GET /inventory/{skuId}`
 - [ ] `POST /inventory/{skuId}` (create or add). Decide SKU case sensitivity first (options in the README's contract-gaps row)

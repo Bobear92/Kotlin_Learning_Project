@@ -28,6 +28,11 @@ and `/walkthrough` add rows as new concepts come up.
 | `kotlin.test` assertions | `assertEquals`, `assertTrue`, `assertFailsWith<T> { }` | [InventoryRepositoryTest.kt](notes/test/inventory/InventoryRepositoryTest.kt.md) |
 | Extension functions | `fun MockMvc.get(...)`: a function added to a class from outside it | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
 | Raw strings `"""` | Multi-line strings without escaping; `trimIndent()` to strip indentation | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
+| Primary constructor properties | `class X(private val dep: Dep)`: declares and assigns a property in the constructor | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| Read-only `List` vs `MutableList` | `List` has no `add`/`remove`; callers get a snapshot | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| Lambdas, `_` and SAM conversion | `{ rs, _ -> ... }` stands in for Java's single-method `RowMapper`; `_` = unused parameter | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| KDoc vs `// Why:` | KDoc (`/** */`) says what, for callers, shown on hover; `// Why:` says why, for maintainers | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| JSpecify nullability from Java | Spring 7's `@Nullable` makes `query(Class)` yield `T?`; a row-mapper lambda keeps `T` non-null | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
 
 ## Spring
 
@@ -47,6 +52,9 @@ and `/walkthrough` add rows as new concepts come up.
 | `@AutoConfigureMockMvc` + Kotlin MockMvc DSL | In-process HTTP requests; `mockMvc.get(...).andExpect { }` | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
 | `JsonCompareMode.STRICT` | Exact JSON match: no extra fields, array order matters | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
 | Flyway migrations | `V<n>__<desc>.sql` (two underscores) in `db/migration`, run once at startup, checksummed; wrong names are skipped silently | [V1__create_inventory.sql](notes/main/resources/db/migration/V1__create_inventory.sql.md) |
+| Component scanning and stereotypes | `@Repository`/`@Service`/`@RestController` make scanned classes beans; `@Import` registers one by hand | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| Constructor injection | A single constructor is autowired without `@Autowired`; beans are created at startup | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| `JdbcClient` query chain | `sql(...)` prepares, `query { row mapper }` maps, `list()` runs and collects | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
 
 ## Database and API design
 
