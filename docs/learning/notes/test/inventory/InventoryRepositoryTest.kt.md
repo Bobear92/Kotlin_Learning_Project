@@ -1,6 +1,6 @@
 # InventoryRepositoryTest.kt
 
-> Source: [src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepositoryTest.kt](../../../../../src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepositoryTest.kt) · Last synced with code: 2026-09-24
+> Source: [src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepositoryTest.kt](../../../../../src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepositoryTest.kt) · Last synced with code: 2026-09-25
 
 ## Role
 
@@ -137,6 +137,12 @@ fun `findAll includes SKUs with zero stock`() {
 
 **Why:** it pins the 2026-09-24 decision. A sold-out SKU still exists and is listed. If
 someone later adds `WHERE quantity > 0`, this test fails.
+
+**Predicting which tests a change breaks:** first ask *which code does each test actually call?*
+With `WHERE quantity > 0` added to `findAll`, only this test fails. The empty-table test still gets
+`[]` (a filter can't turn nothing into something), the ordering test has no zero rows, and the
+backstop test never calls `findAll` at all: it runs its own `UPDATE`, and a `WHERE` in a `SELECT`
+only filters what is read, never what is written.
 
 ### The database backstop
 

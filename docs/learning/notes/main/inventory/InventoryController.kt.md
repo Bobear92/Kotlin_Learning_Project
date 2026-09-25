@@ -55,6 +55,22 @@ each function. It's the usual Spring pattern, and it will fit the next endpoints
 [repository](InventoryRepository.kt.md#a-spring-bean-with-constructor-injection). The space in
 `InventoryController (` is legal and changes nothing.
 
+**Spring (one object, many threads):** Spring builds this controller **once, at startup**, not per
+request. Component scanning finds the stereotypes, and Spring builds the beans bottom-up
+(`JdbcClient` → repository → service → controller), passing each into the next constructor.
+After that there is exactly one `InventoryController` (a *singleton*). When requests arrive,
+Tomcat gives each one its own **thread** (up to 200 by default; the rest queue), and every thread
+calls `listInventory()` on that **same object**. More requests means more threads, not more objects.
+
+That's why Spring beans must be **stateless**. A `var lastResult` field would be shared by every
+thread: request A writes it, request B overwrites it, and A reads B's data. That's a **race
+condition**, and it only shows up intermittently. This class only holds a `private val` reference
+that never changes after startup, so it's safe. Purchases have the same shape of risk (read stock,
+check, write), which is why stock changes are single atomic SQL statements.
+
+To see it yourself: temporarily add `println(System.identityHashCode(this))` to `listInventory()`,
+call the endpoint twice with `bootRun` running, and see the same number both times.
+
 ### The `// Contract:` comment
 
 ```kotlin
@@ -120,12 +136,14 @@ On a public function that's the better choice: the signature shows what the endp
 without anyone having to look at the service.
 
 **Contract:** returning `List<InventoryItem>` is what makes the body "an array of `InventoryItem`".
-The empty-array rule comes from the repository returning an empty list, not from anything here.
+The empty-array rule comes from the repository returning an empty list, and the SKU order from its
+`ORDER BY sku_id`, not from anything here. The controller never sorts or filters.
 `InventoryControllerTest` checks both cases with `JsonCompareMode.STRICT`.
 
 ## Check your understanding
 
 - What would the response be if `@RestController` were replaced with `@Controller`?
+- A thousand requests hit `GET /inventory` at once. How many `InventoryController` objects exist? Why must it have no `var` fields?
 - Which path does `@GetMapping("/{skuId}")` in this class map to, and why?
 - What status does `POST /inventory` get today, and what about `GET /inventory/`?
 - Where in this code is JSON produced? Which part decides the field names?

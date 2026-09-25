@@ -1,6 +1,6 @@
 # InventoryControllerTest.kt
 
-> Source: [src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryControllerTest.kt](../../../../../src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryControllerTest.kt) · Last synced with code: 2026-09-24
+> Source: [src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryControllerTest.kt](../../../../../src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryControllerTest.kt) · Last synced with code: 2026-09-25
 
 ## Role
 
@@ -143,6 +143,12 @@ ignores whitespace.
 extra fields appear, the order, and that a zero-stock SKU is included.
 
 **Contract:** a JSON array of `InventoryItem` objects, `{"skuId": string, "quantity": integer}`.
+
+**Renaming a property breaks exactly one test.** If `skuId` became `sku` in `InventoryItem`
+(and everything still compiled), the repository tests would pass (they compare objects, and the
+constructor takes arguments by position), and the empty-array test would pass (`[]` has no fields).
+Only `GET inventory returns every SKU with its quantity` fails, because Jackson would write
+`"sku"` and STRICT expects `"skuId"`. This test is what keeps the JSON in line with the contract.
 
 ## Check your understanding
 

@@ -109,12 +109,22 @@ and `return`, and shortened it once it passed. Concept explained in full in
 - `ORDER BY sku_id`: without `ORDER BY`, SQL guarantees **no** order. Postgres returns rows in
   whatever order is cheapest, which can change after updates, deletes or a new query plan. The
   decision (2026-09-24) was to sort by SKU id so every response is deterministic. `sku_id` is
-  `TEXT`, so the order is alphabetical, not numeric. The test inserts SKUs out of order to prove it.
+  `TEXT`, so the order is by text, not numeric. Postgres sorts text by the database's **collation**
+  (its sorting rules), so uppercase, lowercase and digits don't always follow a plain A-Z order.
+  The rule we promise is simply "ordered by `sku_id`". The test inserts SKUs out of order to prove it.
 - Column names are the **database** names (`sku_id`, snake_case), not the Kotlin property
   names (`skuId`).
 
 **Spring:** `jdbcClient.sql(...)` only *prepares* a statement. Nothing runs until a terminal
-call such as `.list()`.
+call such as `.list()`:
+
+| Step | What it does | Touches the database? |
+| --- | --- | --- |
+| `.sql("SELECT ...")` | stores the SQL text | no |
+| `.query { ... }` | stores the recipe for turning **one row** into an `InventoryItem` | no |
+| `.list()` | runs the query, applies the recipe to each row, collects the results | **yes** |
+
+`.query` doesn't work on results; it's handed over *before* the query runs.
 
 ### Mapping each row: the lambda
 
@@ -130,7 +140,24 @@ call such as `.list()`.
 left of `->` and the result goes right. The last expression is the return value, with no `return`.
 - `rs` is only a name (short for `ResultSet`, the JDBC convention). `row` would work just as well.
 - `_` means "there's a parameter here, and I don't use it". Spring's `RowMapper` always passes
-  two arguments (the result set and the row number), so the lambda must accept two.
+  two arguments (the result set and the row number), so the lambda must accept two. `_` has
+  nothing to do with looping: `.list()` does the looping and calls the lambda once per row.
+- **The lambda returns a value on every call.** Its last expression, `InventoryItem(...)`, is the
+  return value, and `.list()` collects those return values into the list. Without them there would
+  be nothing to collect. It's the same shape as `map` on a plain list:
+
+  ```kotlin
+  val books = listOf(Book("Dune", 1965), Book("Emma", 1815))
+  val titles = books.map { book -> book.title.uppercase() }   // ["DUNE", "EMMA"]
+  ```
+
+  | Call | Input | Return value |
+  | --- | --- | --- |
+  | 1 | `Book("Dune", 1965)` / row `('a-sku', 5)` | `"DUNE"` / `InventoryItem("a-sku", 5)` |
+  | 2 | `Book("Emma", 1815)` / row `('b-sku', 0)` | `"EMMA"` / `InventoryItem("b-sku", 0)` |
+
+  Only what the lambda returns reaches the result: `{ book -> book.year }` would give
+  `[1965, 1815]`, a `List<Int>`, and the titles would be gone.
 - The types are inferred from `RowMapper`, so you never write `rs: ResultSet`.
 - **Trailing lambda:** when a lambda is the last argument, it moves outside the parentheses, and
   when it's the only one, the parentheses disappear, so `.query { ... }` instead of `.query({ ... })`.
@@ -164,7 +191,9 @@ Spring 7 annotates its Java API with JSpecify nullability annotations, and Kotli
   `InventoryItem`, so the list is `List<InventoryItem>`.
 
 The fix works at **compile time**: the class-based mapping would never actually have returned null
-for these rows, but the compiler couldn't prove it. It's also more explicit, since you can see
+for these rows, but the compiler couldn't prove it. The compiler never looks at the database, so it
+can't know `sku_id` is a primary key; it only reads Spring's declared types. The non-null columns
+matter at *runtime* instead (see "Null safety, one level deeper" below). It's also more explicit, since you can see
 which column goes into which property. That fits the reason `JdbcClient` was chosen (explicit SQL).
 
 `(Mutable)List` is Kotlin saying it can't tell whether a Java `List` is meant to be changed. It's

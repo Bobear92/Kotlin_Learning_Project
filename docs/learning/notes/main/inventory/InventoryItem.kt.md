@@ -29,6 +29,21 @@ properties in its primary constructor, the compiler generates:
 | `copy(...)` | A new item with some properties changed: `item.copy(quantity = 0)` | No built-in equivalent |
 | `component1()`, `component2()` | Destructuring: `val (sku, qty) = item` | Record patterns (Java 21) |
 
+`data` does **not** make a class immutable: `data class Foo(var x: Int)` compiles and is mutable.
+Immutability comes from `val`; `data` only generates the functions above.
+
+**Kotlin (`==` is `equals`):** `a == b` calls `a.equals(b)` (Kotlin's `===` is Java's `==`,
+"same object"). It's an in-memory comparison and never touches the database, so it can't fail on a
+duplicate key; it just returns `true` or `false`.
+- With `data`, `InventoryItem("widget", 5) == InventoryItem("widget", 5)` is `true`: the properties
+  are compared.
+- Without `data`, `equals` is inherited from `Any` and asks "same object?". Two constructor calls
+  make two objects, so it's `false`. Like two $5 bills: same value, two bills.
+
+**Kotlin (`copy` makes a new object):** `val b = a.copy(quantity = 6)` leaves `a` untouched
+(`quantity` is a `val`, so it couldn't change anyway) and returns a new item,
+`InventoryItem(skuId=widget, quantity=6)`. It's how you "change" immutable data.
+
 The closest Java equivalent is a `record InventoryItem(String skuId, int quantity)`. Only properties
 declared in the primary constructor count toward `equals` and the rest. Value equality is what makes the
 repository test work: `assertEquals(listOf(InventoryItem("sold-out", 0)), ...)` compares a list
@@ -72,4 +87,5 @@ removed the blank line on 2026-09-25.
 
 - What would `InventoryItem("widget", 5) == InventoryItem("widget", 5)` return? What would it return if `data` were removed?
 - Why `val` and not `var`, given that stock quantities change all the time?
+- After `val b = a.copy(quantity = 6)`, what is `a.quantity`? What is `a == b`?
 - If `skuId` were renamed to `sku`, which test would fail first, and why?

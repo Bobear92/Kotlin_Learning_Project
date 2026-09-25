@@ -38,8 +38,8 @@ and checks items off as they are done. Newest decisions are recorded in the READ
 
 ## Features (one `/feature` + `/walkthrough` each)
 
-- [ ] `GET /inventory`: ordered by `sku_id`, zero-stock SKUs included. Tests written 2026-09-24; Robert writes the code. Done: migration, `InventoryItem`, repository (4/4 green), service, controller (build 7/7 green, 2026-09-25); study notes written 2026-09-25; Claude's review done and Robert's KDoc/`// Contract:` fixes plus controller rename to `listInventory` (2026-09-25). Next: walkthrough, then `/ship`
-- [ ] `/walkthrough` of `GET /inventory`
+- [ ] `GET /inventory`: ordered by `sku_id`, zero-stock SKUs included. Tests written 2026-09-24; Robert writes the code. Done: migration, `InventoryItem`, repository (4/4 green), service, controller (build 7/7 green, 2026-09-25); study notes written 2026-09-25; Claude's review done and Robert's KDoc/`// Contract:` fixes plus controller rename to `listInventory` (2026-09-25). Walkthrough done 2026-09-25. Next: `/ship`
+- [x] `/walkthrough` of `GET /inventory` (2026-09-25)
 - [ ] `GET /inventory/{skuId}`
 - [ ] `POST /inventory/{skuId}` (create or add). Decide SKU case sensitivity first (options in the README's contract-gaps row)
 - [ ] `POST /inventory/{skuId}/purchase`

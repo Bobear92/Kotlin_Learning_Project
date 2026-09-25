@@ -1,6 +1,6 @@
 # V1__create_inventory.sql
 
-> Source: [src/main/resources/db/migration/V1__create_inventory.sql](../../../../../../../src/main/resources/db/migration/V1__create_inventory.sql) · Last synced with code: 2026-09-24
+> Source: [src/main/resources/db/migration/V1__create_inventory.sql](../../../../../../../src/main/resources/db/migration/V1__create_inventory.sql) · Last synced with code: 2026-09-25
 
 ## Role
 
@@ -49,6 +49,22 @@ exist". Silent skipping is the dangerous part, so check the startup log for
 `flyway_schema_history` table with a checksum of the file. If the file changes afterwards,
 startup fails with a checksum mismatch. Schema changes go in a new file (`V2__...`). While
 you're still developing locally, the fix is to reset the local database instead.
+
+**Migrations are changes, not snapshots.** Think of them like git commits: each file describes
+what changes from the previous state, not the whole schema. So V2 doesn't recreate the table, it
+alters it:
+
+```sql
+-- V2__add_created_at_to_inventory.sql
+ALTER TABLE inventory ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+```
+
+A second `CREATE TABLE inventory` would fail with `relation "inventory" already exists` on any
+database that already ran V1, and dropping and recreating the table would delete its data. The
+schema is the whole chain, V1 then V2 then V3: a fresh database (a new teammate, or
+Testcontainers) runs them all in order, and an existing one runs only the files it hasn't seen.
+Both end up the same. (Added after the 2026-09-25 walkthrough, where "V2 recreates the table" was
+the first guess.)
 
 ### The table and its key
 
