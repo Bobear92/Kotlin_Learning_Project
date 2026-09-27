@@ -20,4 +20,16 @@ class InventoryRepository(
                 InventoryItem(rs.getString("sku_id"), rs.getInt("quantity"))
             }
             .list()
+            
+            
+    /** Returns a SKU with its quantity for a specific SKU. Will return null if no such SKU exists */        
+    fun findBySkuId(skuId: String): InventoryItem? = jdbcClient.sql("SELECT sku_id, quantity FROM inventory WHERE sku_id = :skuId")
+
+    // Why: We parameterized the skuid instead of adding it directly to the sql above for sql injection prevention. 
+            .param("skuId", skuId)
+            .query{rs, _ ->
+                InventoryItem(skuId = rs.getString("sku_id"), quantity = rs.getInt("quantity"))
+            }
+    // Why: The list singleOrNull below, we did this over the Java optional so we can stay within kotlin. We wont have more than one entry in the list because sku_id is the primary key so it is unique.
+            .list().singleOrNull()
 }
