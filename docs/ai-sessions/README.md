@@ -30,4 +30,5 @@ from 01 each day in the order sessions were started.
 | [2026-09-27_01](2026-09-27/2026-09-27_01.md) | Inventory skuId endpoint | 2026-09-27 18:09 | 10 |
 | [2026-09-27_02](2026-09-27/2026-09-27_02.md) | InventoryRepository step 2 | 2026-09-27 18:54 | 6 |
 | [2026-09-27_03](2026-09-27/2026-09-27_03.md) | SkuNotFoundException step 3 | 2026-09-27 19:22 | 6 |
-| [2026-09-27_04](2026-09-27/2026-09-27_04.md) | InventoryService step 4 | 2026-09-27 19:49 | 3 |
+| [2026-09-27_04](2026-09-27/2026-09-27_04.md) | InventoryService step 4 | 2026-09-27 19:49 | 4 |
+| [2026-09-27_05](2026-09-27/2026-09-27_05.md) | InventoryController step 5 | 2026-09-27 20:06 | 6 |
