@@ -218,9 +218,12 @@ fun `GET inventory by SKU returns 404 text for a missing SKU`() {
 ```
 
 **Spring: `contentType` vs `contentTypeCompatibleWith`.** `contentType(X)` requires an exact
-match, *including parameters*. When Spring writes a `String` as `text/plain`, it may add the
-character set, `text/plain;charset=UTF-8`. That is still `text/plain`, so the test uses
-`contentTypeCompatibleWith`, which compares only the type and subtype. The JSON tests keep the
+match, *including parameters*. A `text/plain` response can carry a character set,
+`text/plain;charset=UTF-8`, and that is still `text/plain`. So the test uses
+`contentTypeCompatibleWith`, which compares only the type and subtype. Today the app sends plain
+`text/plain` with no charset (checked with `curl` on 2026-09-27): the handler sets the Content-Type
+itself, and the message converter only adds its default charset when no Content-Type is set. The
+looser check keeps the test passing if a `charset=UTF-8` is added later (a TODO item). The JSON tests keep the
 exact `contentType(MediaType.APPLICATION_JSON)`, because Spring doesn't add a charset there.
 
 **Spring: `string(...)`.** It compares the whole body as text, exactly. `json(...)` would be
@@ -230,7 +233,8 @@ wrong here: the contract's `Error` schema is a bare string, not a JSON document.
 Robert's choice on 2026-09-27, because the contract gives no example for the 404.
 
 **Why this is the test that shapes the error handling:** an exception that escapes a controller
-with no handler becomes a `500`, and `ResponseStatusException` gives a JSON error body. Only a
+with no handler becomes a `500`, and `ResponseStatusException` gives no `text/plain` body (in MockMvc
+the body is empty; in the running app Boot renders a JSON or HTML error page). Only a
 handler that sets the status, the content type and the body passes all three checks.
 
 ### Case-sensitive at the HTTP level too
