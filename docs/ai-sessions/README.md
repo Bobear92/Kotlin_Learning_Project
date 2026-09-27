@@ -27,4 +27,5 @@ from 01 each day in the order sessions were started.
 | [2026-09-24_04](2026-09-24/2026-09-24_04.md) | InventoryRepository step 4 | 2026-09-25 03:47 | 8 |
 | [2026-09-25_01](2026-09-25/2026-09-25_01.md) | InventoryService step 5 | 2026-09-25 14:04 | 4 |
 | [2026-09-25_02](2026-09-25/2026-09-25_02.md) | Inventory item step 6 | 2026-09-25 14:59 | 29 |
-| [2026-09-27_01](2026-09-27/2026-09-27_01.md) | Inventory skuId endpoint | 2026-09-27 18:09 | 9 |
+| [2026-09-27_01](2026-09-27/2026-09-27_01.md) | Inventory skuId endpoint | 2026-09-27 18:09 | 10 |
+| [2026-09-27_02](2026-09-27/2026-09-27_02.md) | InventoryRepository step 2 | 2026-09-27 18:54 | 5 |
