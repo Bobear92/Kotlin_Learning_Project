@@ -1,12 +1,12 @@
 # InventoryRepositoryTest.kt
 
-> Source: [src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepositoryTest.kt](../../../../../src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepositoryTest.kt) · Last synced with code: 2026-09-25
+> Source: [src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepositoryTest.kt](../../../../../src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepositoryTest.kt) · Last synced with code: 2026-09-27
 
 ## Role
 
 Tests the repository and the schema against a real Postgres. It checks that SQL results map to
-`InventoryItem`, that rows come back in order, and that the database's `CHECK` constraint really
-blocks negative stock. That last test is the "Database backstop" item from the oversell test
+`InventoryItem`, that rows come back in order, that a single SKU can be looked up (or is `null`
+when missing), and that the database's `CHECK` constraint really blocks negative stock. That last test is the "Database backstop" item from the oversell test
 plan in `.claude/TODO.md`.
 
 ## Walkthrough
@@ -144,6 +144,77 @@ With `WHERE quantity > 0` added to `findAll`, only this test fails. The empty-ta
 backstop test never calls `findAll` at all: it runs its own `UPDATE`, and a `WHERE` in a `SELECT`
 only filters what is read, never what is written.
 
+### Looking up one SKU
+
+```kotlin
+/** One row comes back as an [InventoryItem] when the SKU exists. */
+@Test
+fun `findBySkuId returns the item for an existing SKU`() {
+    insert("widget", 5)
+    insert("gadget", 3)
+
+    assertEquals(InventoryItem("widget", 5), inventoryRepository.findBySkuId("widget"))
+}
+```
+
+**Why two rows:** with only `widget` in the table, a query that forgot its `WHERE` clause would
+still return the right row. The extra `gadget` row makes sure the lookup really filters by SKU.
+
+**Contract:** `GET /inventory/{skuId}` returns "the current quantity on hand for the specified SKU".
+
+### A missing SKU is `null`
+
+```kotlin
+/** No row means null, not an exception: the service decides that a missing SKU is a 404. */
+@Test
+fun `findBySkuId returns null for a missing SKU`() {
+    insert("widget", 5)
+
+    assertNull(inventoryRepository.findBySkuId("missing"))
+}
+```
+
+**Kotlin: `assertNull`.** Also from `kotlin.test`. It passes only if the value is `null`. The
+test relies on `findBySkuId` being able to return `null`, which is why the plan gives it the
+nullable return type `InventoryItem?` (explained in the repository's notes).
+
+**Why `null` and not an exception here:** "no row" is a normal answer to a database question,
+not an error. Turning it into "404 SKU not found" is a business decision, so it belongs in the
+service. That keeps the repository reusable: purchase will look SKUs up too, and it treats a
+missing one differently from low stock.
+
+### Zero stock is found
+
+```kotlin
+@Test
+fun `findBySkuId returns a SKU with zero stock`() {
+    insert("sold-out", 0)
+
+    assertEquals(InventoryItem("sold-out", 0), inventoryRepository.findBySkuId("sold-out"))
+}
+```
+
+**Why:** the same decision `findAll` pins. A sold-out SKU still exists, so it must not look like a
+missing one. That difference matters to the API: `200` with `quantity: 0` versus `404`.
+
+### Case-sensitive match
+
+```kotlin
+// Why: SKU ids are an exact, case-sensitive match for now (README "Column types" decision).
+/** `WIDGET` and `widget` are different SKUs. */
+@Test
+fun `findBySkuId matches the SKU id case-sensitively`() {
+    insert("widget", 5)
+
+    assertNull(inventoryRepository.findBySkuId("WIDGET"))
+}
+```
+
+**Why:** Postgres compares `TEXT` case-sensitively, so a plain `WHERE sku_id = ?` already
+behaves this way. The test pins the current decision. If we later choose to normalize case (an
+open question for `POST`), this is the test that has to change, which makes that change a
+visible decision rather than an accident.
+
 ### The database backstop
 
 ```kotlin
@@ -182,3 +253,7 @@ the test discards everything anyway.
   `InventoryControllerTest`?
 - If `@JdbcTest` didn't roll back, which test here would start failing, and when?
 - What would the ordering test prove if the rows were inserted already sorted?
+- Why does `findBySkuId` return `null` for a missing SKU instead of throwing the exception that
+  becomes the 404?
+- Which `findBySkuId` test would catch a query that forgot its `WHERE` clause, and why does it
+  need two rows?

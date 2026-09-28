@@ -10,11 +10,12 @@ import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.jdbc.core.simple.JdbcClient
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
  * [InventoryRepository] and the `inventory` schema against a real Postgres: row mapping, ordering,
- * and the `CHECK (quantity >= 0)` backstop. Each test runs in a transaction that is rolled back.
+ * single-SKU lookup, and the `CHECK (quantity >= 0)` backstop. Each test runs in a transaction that is rolled back.
  */
 @JdbcTest
 @Import(TestcontainersConfiguration::class, InventoryRepository::class)
@@ -58,6 +59,40 @@ class InventoryRepositoryTest @Autowired constructor(
         insert("sold-out", 0)
 
         assertEquals(listOf(InventoryItem("sold-out", 0)), inventoryRepository.findAll())
+    }
+
+    /** One row comes back as an [InventoryItem] when the SKU exists. */
+    @Test
+    fun `findBySkuId returns the item for an existing SKU`() {
+        insert("widget", 5)
+        insert("gadget", 3)
+
+        assertEquals(InventoryItem("widget", 5), inventoryRepository.findBySkuId("widget"))
+    }
+
+    /** No row means null, not an exception: the service decides that a missing SKU is a 404. */
+    @Test
+    fun `findBySkuId returns null for a missing SKU`() {
+        insert("widget", 5)
+
+        assertNull(inventoryRepository.findBySkuId("missing"))
+    }
+
+    /** A sold-out SKU still exists, so it is found with quantity 0. */
+    @Test
+    fun `findBySkuId returns a SKU with zero stock`() {
+        insert("sold-out", 0)
+
+        assertEquals(InventoryItem("sold-out", 0), inventoryRepository.findBySkuId("sold-out"))
+    }
+
+    // Why: SKU ids are an exact, case-sensitive match for now (README "Column types" decision).
+    /** `WIDGET` and `widget` are different SKUs. */
+    @Test
+    fun `findBySkuId matches the SKU id case-sensitively`() {
+        insert("widget", 5)
+
+        assertNull(inventoryRepository.findBySkuId("WIDGET"))
     }
 
     /** Oversell backstop: the database itself refuses to store negative stock. */

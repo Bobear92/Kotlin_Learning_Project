@@ -15,8 +15,9 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
 
 /**
- * `GET /inventory` through the full stack (MockMvc → controller → service → repository → Postgres),
- * checking status, content type and the exact JSON body against the contract.
+ * `GET /inventory` and `GET /inventory/{skuId}` through the full stack
+ * (MockMvc → controller → service → repository → Postgres), checking status, content type and the
+ * exact body (JSON on success, plain text on 404) against the contract.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -71,6 +72,62 @@ class InventoryControllerTest @Autowired constructor(
                     """,
                     JsonCompareMode.STRICT,
                 )
+            }
+        }
+    }
+
+    /** Contract: 200 with a single InventoryItem as JSON. */
+    @Test
+    fun `GET inventory by SKU returns the item`() {
+        insert("CW-XYCS-BM-01", 10)
+        insert("widget", 5)
+
+        mockMvc.get("/inventory/CW-XYCS-BM-01").andExpect {
+            status { isOk() }
+            content {
+                contentType(MediaType.APPLICATION_JSON)
+                json("""{"skuId": "CW-XYCS-BM-01", "quantity": 10}""", JsonCompareMode.STRICT)
+            }
+        }
+    }
+
+    /** A sold-out SKU exists, so it is a 200 with quantity 0, not a 404. */
+    @Test
+    fun `GET inventory by SKU returns zero stock as 200`() {
+        insert("sold-out", 0)
+
+        mockMvc.get("/inventory/sold-out").andExpect {
+            status { isOk() }
+            content {
+                contentType(MediaType.APPLICATION_JSON)
+                json("""{"skuId": "sold-out", "quantity": 0}""", JsonCompareMode.STRICT)
+            }
+        }
+    }
+
+    // Why: contentTypeCompatibleWith ignores parameters, so "text/plain;charset=UTF-8" also passes.
+    /** Contract: 404 with a `text/plain` Error string, not JSON. Message text agreed with Robert. */
+    @Test
+    fun `GET inventory by SKU returns 404 text for a missing SKU`() {
+        mockMvc.get("/inventory/missing").andExpect {
+            status { isNotFound() }
+            content {
+                contentTypeCompatibleWith(MediaType.TEXT_PLAIN)
+                string("SKU not found: missing")
+            }
+        }
+    }
+
+    /** SKU ids match case-sensitively, so a SKU that differs only in case is not found. */
+    @Test
+    fun `GET inventory by SKU is case-sensitive`() {
+        insert("widget", 5)
+
+        mockMvc.get("/inventory/WIDGET").andExpect {
+            status { isNotFound() }
+            content {
+                contentTypeCompatibleWith(MediaType.TEXT_PLAIN)
+                string("SKU not found: WIDGET")
             }
         }
     }

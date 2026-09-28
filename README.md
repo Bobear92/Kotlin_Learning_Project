@@ -13,7 +13,7 @@ is in [docs/Nuuly_Assessment_Instructions.txt](docs/Nuuly_Assessment_Instruction
 | Method | Path | Behavior | Responses | Status |
 | --- | --- | --- | --- | --- |
 | `GET` | `/inventory` | List every SKU and its quantity (`[]` when empty) | `200` JSON array | Implemented; tests green; reviewed and walked through |
-| `GET` | `/inventory/{skuId}` | Current quantity for one SKU | `200` JSON, `404` text | Not started |
+| `GET` | `/inventory/{skuId}` | Current quantity for one SKU (`404` body: `SKU not found: <skuId>`) | `200` JSON, `404` text | Implemented; tests green; walkthrough pending |
 | `POST` | `/inventory/{skuId}` | Add stock; creates the SKU if it is new | `200` JSON, `400` text | Not started |
 | `POST` | `/inventory/{skuId}/purchase` | Deduct stock, only if enough is on hand | `200` JSON, `400` / `404` text | Not started |
 
@@ -60,6 +60,7 @@ Each decision and its reasoning is recorded here once it is made.
 | Schema migrations | **Flyway**: versioned plain-SQL files, run automatically at startup and in tests. Considered Liquibase (XML/YAML changesets, more ceremony) and `schema.sql` (no versioning). | Decided 2026-09-23 |
 | List order and contents | **Ordered by `sku_id`** (the contract specifies no order; a fixed one keeps responses and tests stable). **Zero-stock SKUs are listed**: a sold-out SKU still exists, and `GET /inventory/{skuId}` returns it with quantity `0`. | Decided 2026-09-24 |
 | Column types | `sku_id TEXT` (exact, case-sensitive match for now), `quantity INTEGER` (Kotlin `Int`). Considered `BIGINT`/`Long`; overflow will be handled when adding stock instead. | Decided 2026-09-24 |
+| Error handling | A domain exception per error (`SkuNotFoundException`), thrown by the service and mapped to a `text/plain` response by one `@RestControllerAdvice`. Exceptions and the handler live in the `inventory.error` subpackage. 404 body: `SKU not found: <skuId>`, no trailing period. Considered a `ResponseEntity` built in each controller (repeats per endpoint), `ResponseStatusException` (JSON body, the contract needs `text/plain`), and a flat or top-level `error` package. | Decided 2026-09-27 |
 | Demo seed data | Tests insert their own rows. Whether a running app should start with sample data (e.g. a dev-only Flyway location) is decided once `POST /inventory/{skuId}` exists. | Open |
 | Contract gaps | Malformed or missing JSON body, `quantity` of wrong type, SKU id format/case sensitivity (currently exact, case-sensitive: `W` and `w` are two SKUs; options to decide with `POST`: keep exact match, normalize case in the app, a case-insensitive column, or reject non-canonical SKUs), integer overflow on add | Open |
 
@@ -117,6 +118,11 @@ curl -i http://localhost:8080/inventory
 # HTTP/1.1 200
 # Content-Type: application/json
 # []
+
+curl -i http://localhost:8080/inventory/CW-XYCS-BM-01
+# HTTP/1.1 404
+# Content-Type: text/plain
+# SKU not found: CW-XYCS-BM-01
 ```
 
 `bootRun` starts Postgres from [compose.yaml](compose.yaml) automatically (Spring Boot's
@@ -138,6 +144,7 @@ src/main/
   kotlin/com/robertwoolbright/inventory/
     InventoryApplication.kt   Entry point; component scan starts here
     inventory/                The inventory feature: controller, service, repository, models
+      error/                  Domain exceptions and the handler that maps them to HTTP errors
   resources/
     application.yml           Spring Boot configuration
     db/migration/             Flyway SQL migrations (V1__..., V2__...)
@@ -178,6 +185,8 @@ teaching lives next to it in study notes:
   line with Claude, answer check-your-understanding questions, and log the session in
   [docs/learning/walkthroughs/](docs/learning/walkthroughs/). New concepts are indexed in
   [docs/learning/kotlin-concepts.md](docs/learning/kotlin-concepts.md).
+- **Interview prep.** Questions I expect in the follow-up interview, with folded answers, grow
+  during each walkthrough in [docs/learning/interview-prep.md](docs/learning/interview-prep.md).
 
 ## AI-assisted development
 
