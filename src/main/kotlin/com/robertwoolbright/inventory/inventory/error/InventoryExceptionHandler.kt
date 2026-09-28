@@ -39,15 +39,15 @@ class InventoryExceptionHandler{
             .body(ex.message ?: "Overflow Guard Triggered")
     
             
-    // Contract: paths./inventory/{skuId}.post - quantity has minimum: 1; a violation is a 400 text/plain.
+    // Contract: paths./inventory/{skuId}.post - a request body that fails validation is a 400 text/plain.
     
-    /** Returns a 400 text/plain response from the @Min message from the failing field.*/              
+    /** Returns a 400 text/plain response from the failing field's validation message.*/              
     @ExceptionHandler(MethodArgumentNotValidException::class)
-    fun handleMinQuantity(ex: MethodArgumentNotValidException): ResponseEntity<String> =
+    fun handleValidationFailure(ex: MethodArgumentNotValidException): ResponseEntity<String> =
 
         ResponseEntity.status(HttpStatus.BAD_REQUEST)
             .contentType(MediaType.TEXT_PLAIN)
-            .body(ex.bindingResult.fieldError?.defaultMessage ?: "quantity must be at least 1")
+            .body(ex.bindingResult.fieldError?.defaultMessage ?: "Invalid request")
        
             
     // Contract: paths./inventory/{skuId}.post - when the request body is invalid we return a 400 text/plain.
