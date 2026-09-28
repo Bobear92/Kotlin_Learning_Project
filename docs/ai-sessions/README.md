@@ -32,4 +32,4 @@ from 01 each day in the order sessions were started.
 | [2026-09-27_03](2026-09-27/2026-09-27_03.md) | SkuNotFoundException step 3 | 2026-09-27 19:22 | 6 |
 | [2026-09-27_04](2026-09-27/2026-09-27_04.md) | InventoryService step 4 | 2026-09-27 19:49 | 4 |
 | [2026-09-27_05](2026-09-27/2026-09-27_05.md) | InventoryController step 5 | 2026-09-27 20:06 | 7 |
-| [2026-09-27_06](2026-09-27/2026-09-27_06.md) | InventoryExceptionHandler walkthrough | 2026-09-27 20:58 | 17 |
+| [2026-09-27_06](2026-09-27/2026-09-27_06.md) | InventoryExceptionHandler walkthrough | 2026-09-27 20:58 | 18 |
