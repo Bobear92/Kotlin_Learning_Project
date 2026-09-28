@@ -1,6 +1,6 @@
 # build.gradle.kts
 
-> Source: [build.gradle.kts](../../../build.gradle.kts) · Last synced with code: 2026-09-23
+> Source: [build.gradle.kts](../../../build.gradle.kts) · Last synced with code: 2026-09-28
 
 ## Role
 
@@ -135,6 +135,7 @@ Flyway, JDBC and Web MVC each have their own starter and test starter.
 | `spring-boot-starter-webmvc` | Spring MVC on an embedded Tomcat, plus Jackson for JSON. (Boot 4 introduced `starter-webmvc`; the old `starter-web` still exists but is deprecated.) |
 | `kotlin-reflect` | Lets Spring read Kotlin metadata that Java reflection can't see, such as whether a parameter is nullable and whether it has a default value. |
 | `jackson-module-kotlin` | Teaches Jackson to build Kotlin classes. A `data class` with `val` properties has no no-arg constructor and no setters; this module calls the primary constructor and respects non-null types and default values. `tools.jackson` is **Jackson 3**'s group ID (Boot 4 moved to Jackson 3). |
+| `spring-boot-starter-validation` | **Bean Validation**: the `jakarta.validation` annotations (`@Min`, `@NotBlank`, ...) plus Hibernate Validator, the engine that checks them. Boot auto-configures a validator, and Spring MVC runs it on any `@Valid @RequestBody` parameter, throwing `MethodArgumentNotValidException` (a 400 by default) before the controller body runs. Without it, `@Min` doesn't compile. We use it for the contract's `quantity` `minimum: 1`. No version: the BOM resolves it (4.1.1 → Hibernate Validator 9.1). |
 | `spring-boot-docker-compose` | On `bootRun`, runs `docker compose up` on `compose.yaml` and points the DataSource at it. See [compose.yaml notes](compose.yaml.md). |
 | `postgresql` | The JDBC driver. We code only against the standard `java.sql` interfaces, so it's `runtimeOnly`. |
 
@@ -200,4 +201,5 @@ use it as a real class. So you write `withType<Test>` instead of Java's
 
 - Why does `postgresql` use `runtimeOnly` and not `implementation`? What would break if it were `compileOnly`?
 - Remove `kotlin("plugin.spring")`. Which kind of class would Spring fail on, and why?
+- `spring-boot-starter-validation` has no version in this file. Where does Gradle get one, and how would you check which it picked?
 - What does `-Xjsr305=strict` change about a Java method annotated `@Nullable String find()` when called from Kotlin?
