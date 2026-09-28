@@ -15,7 +15,8 @@ import kotlin.test.assertTrue
 
 /**
  * [InventoryRepository] and the `inventory` schema against a real Postgres: row mapping, ordering,
- * single-SKU lookup, and the `CHECK (quantity >= 0)` backstop. Each test runs in a transaction that is rolled back.
+ * single-SKU lookup, adding stock (create, add, overflow guard), and the `CHECK (quantity >= 0)` backstop.
+ * Each test runs in a transaction that is rolled back.
  */
 @JdbcTest
 @Import(TestcontainersConfiguration::class, InventoryRepository::class)
@@ -29,6 +30,13 @@ class InventoryRepositoryTest @Autowired constructor(
             .params(skuId, quantity)
             .update()
     }
+
+    private fun quantityOf(skuId: String): Int? =
+        jdbcClient.sql("SELECT quantity FROM inventory WHERE sku_id = ?")
+            .param(skuId)
+            .query { rs, _ -> rs.getInt("quantity") }
+            .list()
+            .singleOrNull()
 
     /** No rows means an empty list, never null. */
     @Test
@@ -93,6 +101,74 @@ class InventoryRepositoryTest @Autowired constructor(
         insert("widget", 5)
 
         assertNull(inventoryRepository.findBySkuId("WIDGET"))
+    }
+
+    /** Contract: "If the SKU does not yet exist in inventory, it is created with the given quantity." */
+    @Test
+    fun `addStock creates a new SKU with the given quantity`() {
+        assertEquals(InventoryItem("widget", 5), inventoryRepository.addStock("widget", 5))
+        assertEquals(5, quantityOf("widget"))
+    }
+
+    /** Contract: "If it already exists, the quantity is added to the current stock." */
+    @Test
+    fun `addStock adds to the quantity of an existing SKU`() {
+        insert("widget", 5)
+
+        assertEquals(InventoryItem("widget", 8), inventoryRepository.addStock("widget", 3))
+        assertEquals(8, quantityOf("widget"))
+    }
+
+    /** A sold-out SKU still has a row, so restocking it updates that row rather than inserting. */
+    @Test
+    fun `addStock restocks a SKU with zero stock`() {
+        insert("sold-out", 0)
+
+        assertEquals(InventoryItem("sold-out", 4), inventoryRepository.addStock("sold-out", 4))
+    }
+
+    // Why: a decoy row catches an UPDATE that forgot its WHERE / conflict target and hit every row.
+    /** Adding stock to one SKU leaves every other SKU alone. */
+    @Test
+    fun `addStock changes only the given SKU`() {
+        insert("widget", 5)
+        insert("gadget", 3)
+
+        inventoryRepository.addStock("widget", 2)
+
+        assertEquals(3, quantityOf("gadget"))
+    }
+
+    /** The largest storable total is allowed: the overflow guard must not be off by one. */
+    @Test
+    fun `addStock can fill a SKU up to exactly Int MAX_VALUE`() {
+        insert("widget", Int.MAX_VALUE - 1)
+
+        assertEquals(InventoryItem("widget", Int.MAX_VALUE), inventoryRepository.addStock("widget", 1))
+    }
+
+    // Why: a naive `quantity + EXCLUDED.quantity <= max` check overflows itself, so Postgres throws
+    // instead of returning null; the second call catches that.
+    /** Overflow is refused atomically: null comes back and the stored quantity is unchanged. */
+    @Test
+    fun `addStock returns null and leaves stock unchanged when the total would overflow`() {
+        insert("widget", Int.MAX_VALUE - 1)
+        insert("full", Int.MAX_VALUE)
+
+        assertNull(inventoryRepository.addStock("widget", 2))
+        assertNull(inventoryRepository.addStock("full", Int.MAX_VALUE))
+        assertEquals(Int.MAX_VALUE - 1, quantityOf("widget"))
+        assertEquals(Int.MAX_VALUE, quantityOf("full"))
+    }
+
+    // Why: SKU ids are an exact, case-sensitive match (README "Contract gaps" decision, 2026-09-28).
+    /** Adding to `WIDGET` creates a new SKU; it does not touch `widget`. */
+    @Test
+    fun `addStock treats SKU ids case-sensitively`() {
+        insert("widget", 5)
+
+        assertEquals(InventoryItem("WIDGET", 2), inventoryRepository.addStock("WIDGET", 2))
+        assertEquals(5, quantityOf("widget"))
     }
 
     /** Oversell backstop: the database itself refuses to store negative stock. */

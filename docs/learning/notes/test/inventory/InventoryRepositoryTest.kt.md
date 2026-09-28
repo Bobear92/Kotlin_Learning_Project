@@ -1,6 +1,6 @@
 # InventoryRepositoryTest.kt
 
-> Source: [src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepositoryTest.kt](../../../../../src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepositoryTest.kt) · Last synced with code: 2026-09-27
+> Source: [src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepositoryTest.kt](../../../../../src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepositoryTest.kt) · Last synced with code: 2026-09-28
 
 ## Role
 
@@ -215,6 +215,129 @@ behaves this way. The test pins the current decision. If we later choose to norm
 open question for `POST`), this is the test that has to change, which makes that change a
 visible decision rather than an accident.
 
+### Reading one quantity back
+
+```kotlin
+private fun quantityOf(skuId: String): Int? =
+    jdbcClient.sql("SELECT quantity FROM inventory WHERE sku_id = ?")
+        .param(skuId)
+        .query { rs, _ -> rs.getInt("quantity") }
+        .list()
+        .singleOrNull()
+```
+
+**Why a separate query instead of `findBySkuId`:** the `addStock` tests check what's really in
+the table with plain SQL, so a bug in the repository's read code can't hide a bug in its
+write code. The `Int?` is `null` when there's no row, which lets a test assert "nothing was created".
+
+### addStock: create, add, restock
+
+```kotlin
+/** Contract: "If the SKU does not yet exist in inventory, it is created with the given quantity." */
+@Test
+fun `addStock creates a new SKU with the given quantity`() {
+    assertEquals(InventoryItem("widget", 5), inventoryRepository.addStock("widget", 5))
+    assertEquals(5, quantityOf("widget"))
+}
+
+/** Contract: "If it already exists, the quantity is added to the current stock." */
+@Test
+fun `addStock adds to the quantity of an existing SKU`() {
+    insert("widget", 5)
+
+    assertEquals(InventoryItem("widget", 8), inventoryRepository.addStock("widget", 3))
+    assertEquals(8, quantityOf("widget"))
+}
+```
+
+**Why check both the returned value and the stored value:** `addStock` returns the row as it is
+*after* the change (the contract's "updated inventory state"). The test checks that the return
+value and the table agree.
+
+**Contract:** the `post` description has two sentences, and these two tests check one each. The
+zero-stock test after them (`addStock restocks a SKU with zero stock`) makes sure a sold-out
+SKU counts as "already exists".
+
+### A decoy row
+
+```kotlin
+// Why: a decoy row catches an UPDATE that forgot its WHERE / conflict target and hit every row.
+/** Adding stock to one SKU leaves every other SKU alone. */
+@Test
+fun `addStock changes only the given SKU`() {
+    insert("widget", 5)
+    insert("gadget", 3)
+
+    inventoryRepository.addStock("widget", 2)
+
+    assertEquals(3, quantityOf("gadget"))
+}
+```
+
+**Why:** with only one row in the table, "update this SKU" and "update every SKU" look the same.
+The second row tells them apart. The TODO has the same idea as an optional fix for the
+`findBySkuId` zero-stock test.
+
+### The overflow boundary
+
+```kotlin
+/** The largest storable total is allowed: the overflow guard must not be off by one. */
+@Test
+fun `addStock can fill a SKU up to exactly Int MAX_VALUE`() {
+    insert("widget", Int.MAX_VALUE - 1)
+
+    assertEquals(InventoryItem("widget", Int.MAX_VALUE), inventoryRepository.addStock("widget", 1))
+}
+
+// Why: a naive `quantity + EXCLUDED.quantity <= max` check overflows itself, so Postgres throws
+// instead of returning null; the second call catches that.
+/** Overflow is refused atomically: null comes back and the stored quantity is unchanged. */
+@Test
+fun `addStock returns null and leaves stock unchanged when the total would overflow`() {
+    insert("widget", Int.MAX_VALUE - 1)
+    insert("full", Int.MAX_VALUE)
+
+    assertNull(inventoryRepository.addStock("widget", 2))
+    assertNull(inventoryRepository.addStock("full", Int.MAX_VALUE))
+    assertEquals(Int.MAX_VALUE - 1, quantityOf("widget"))
+    assertEquals(Int.MAX_VALUE, quantityOf("full"))
+}
+```
+
+**Kotlin: `Int.MAX_VALUE`.** The largest `Int`, 2,147,483,647 (Java: `Integer.MAX_VALUE`). The
+`quantity` column is a Postgres `INT`, which has the same range.
+
+**Why two tests at the edge:** the first says the largest total is still allowed, and the second
+says one more is refused. Together they pin the check to exactly the right place, so a `<`
+where `<=` belongs fails one of them.
+
+**Why the second `assertNull`:** Postgres checks every arithmetic step for overflow. In a guard
+written as `inventory.quantity + EXCLUDED.quantity <= 2147483647`, the addition itself goes out
+of range, so Postgres raises "integer out of range" instead of just answering "false". The test's
+first call (2,147,483,646 + 2) already triggers that error. The second (`Int.MAX_VALUE` + `Int.MAX_VALUE`)
+also catches a guard that does the sum in a wider type but compares it wrong. A guard that can't
+overflow compares without adding: `inventory.quantity <= 2147483647 - EXCLUDED.quantity`.
+
+**Why `null` and not an exception:** the same reasoning as `findBySkuId`. The repository reports
+what happened ("no row was changed") and the service decides that it means a `400`.
+
+### Case-sensitive add
+
+```kotlin
+// Why: SKU ids are an exact, case-sensitive match (README "Contract gaps" decision, 2026-09-28).
+/** Adding to `WIDGET` creates a new SKU; it does not touch `widget`. */
+@Test
+fun `addStock treats SKU ids case-sensitively`() {
+    insert("widget", 5)
+
+    assertEquals(InventoryItem("WIDGET", 2), inventoryRepository.addStock("WIDGET", 2))
+    assertEquals(5, quantityOf("widget"))
+}
+```
+
+**Why:** the upsert's conflict check (`ON CONFLICT (sku_id)`) uses the primary key, which
+compares `TEXT` exactly. So `WIDGET` doesn't conflict with `widget` and gets its own row.
+
 ### The database backstop
 
 ```kotlin
@@ -257,3 +380,7 @@ the test discards everything anyway.
   becomes the 404?
 - Which `findBySkuId` test would catch a query that forgot its `WHERE` clause, and why does it
   need two rows?
+- Why does the overflow test assert on the table after the `null`s, and not just on the `null`s?
+- Which test fails if the overflow guard uses `<` where `<=` belongs? Which fails if it adds
+  before comparing?
+- What does the `gadget` row prove that a one-row test can't?

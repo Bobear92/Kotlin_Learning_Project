@@ -4,6 +4,8 @@ package com.robertwoolbright.inventory.inventory
 import com.robertwoolbright.inventory.support.TestcontainersConfiguration
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -12,12 +14,17 @@ import org.springframework.http.MediaType
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.json.JsonCompareMode
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.ResultActionsDsl
 import org.springframework.test.web.servlet.get
+import org.springframework.test.web.servlet.post
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 /**
- * `GET /inventory` and `GET /inventory/{skuId}` through the full stack
+ * `GET /inventory`, `GET /inventory/{skuId}` and `POST /inventory/{skuId}` through the full stack
  * (MockMvc → controller → service → repository → Postgres), checking status, content type and the
- * exact body (JSON on success, plain text on 404) against the contract.
+ * exact body (JSON on success, plain text on 400/404) against the contract, and that rejected
+ * requests leave stock unchanged.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -37,6 +44,31 @@ class InventoryControllerTest @Autowired constructor(
         jdbcClient.sql("INSERT INTO inventory (sku_id, quantity) VALUES (?, ?)")
             .params(skuId, quantity)
             .update()
+    }
+
+    private fun quantityOf(skuId: String): Int? =
+        jdbcClient.sql("SELECT quantity FROM inventory WHERE sku_id = ?")
+            .param(skuId)
+            .query { rs, _ -> rs.getInt("quantity") }
+            .list()
+            .singleOrNull()
+
+    private fun postInventory(
+        skuId: String,
+        body: String,
+        mediaType: MediaType = MediaType.APPLICATION_JSON,
+    ): ResultActionsDsl =
+        mockMvc.post("/inventory/$skuId") {
+            contentType = mediaType
+            content = body
+        }
+
+    private fun ResultActionsDsl.andExpectBadRequest(message: String) = andExpect {
+        status { isBadRequest() }
+        content {
+            contentTypeCompatibleWith(MediaType.TEXT_PLAIN)
+            string(message)
+        }
     }
 
     /** Contract: "If no SKUs exist, returns an empty array." */
@@ -130,5 +162,109 @@ class InventoryControllerTest @Autowired constructor(
                 string("SKU not found: WIDGET")
             }
         }
+    }
+
+    /** Contract: a new SKU "is created with the given quantity"; 200 (not 201) with the InventoryItem as JSON. */
+    @Test
+    fun `POST inventory creates a new SKU`() {
+        postInventory("CW-XYCS-BM-01", """{"quantity": 10}""").andExpect {
+            status { isOk() }
+            content {
+                contentType(MediaType.APPLICATION_JSON)
+                json("""{"skuId": "CW-XYCS-BM-01", "quantity": 10}""", JsonCompareMode.STRICT)
+            }
+        }
+        assertEquals(10, quantityOf("CW-XYCS-BM-01"))
+    }
+
+    /** Contract: for an existing SKU "the quantity is added to the current stock"; the new total comes back. */
+    @Test
+    fun `POST inventory adds to an existing SKU`() {
+        insert("widget", 5)
+
+        postInventory("widget", """{"quantity": 3}""").andExpect {
+            status { isOk() }
+            content {
+                contentType(MediaType.APPLICATION_JSON)
+                json("""{"skuId": "widget", "quantity": 8}""", JsonCompareMode.STRICT)
+            }
+        }
+        assertEquals(8, quantityOf("widget"))
+    }
+
+    /** Contract: `quantity` has `minimum: 1`, so 0 and negatives are a 400 and stock is untouched. */
+    @ParameterizedTest(name = "quantity {0}")
+    @ValueSource(ints = [0, -5])
+    fun `POST inventory rejects a quantity below 1`(quantity: Int) {
+        insert("widget", 5)
+
+        postInventory("widget", """{"quantity": $quantity}""")
+            .andExpectBadRequest("quantity must be at least 1")
+        assertEquals(5, quantityOf("widget"))
+    }
+
+    /** A rejected POST for an unknown SKU must not create it with zero stock. */
+    @Test
+    fun `POST inventory with an invalid quantity does not create the SKU`() {
+        postInventory("new-sku", """{"quantity": 0}""")
+            .andExpectBadRequest("quantity must be at least 1")
+        assertNull(quantityOf("new-sku"))
+    }
+
+    // Why: strict JSON (README "Contract gaps" decision, 2026-09-28). Jackson's defaults would turn
+    // "5" into 5 and 1.5 into 1; stock counts must never be guessed.
+    /** Any body that isn't `{"quantity": <whole number that fits in Int>}` is a 400 text/plain. */
+    @ParameterizedTest(name = "body [{0}]")
+    @ValueSource(
+        strings = [
+            "",
+            "{",
+            "null",
+            "[5]",
+            "{}",
+            """{"quantity": null}""",
+            """{"quantity": "5"}""",
+            """{"quantity": 1.5}""",
+            """{"quantity": 3000000000}""",
+        ],
+    )
+    fun `POST inventory rejects an unreadable body`(body: String) {
+        insert("widget", 5)
+
+        postInventory("widget", body).andExpectBadRequest("Invalid request body")
+        assertEquals(5, quantityOf("widget"))
+    }
+
+    // Why: Spring's default is 415, which the contract doesn't list (README "Contract gaps" decision, 2026-09-28).
+    /** The contract only accepts `application/json`; anything else is a 400 text/plain. */
+    @Test
+    fun `POST inventory rejects a non-JSON content type`() {
+        insert("widget", 5)
+
+        postInventory("widget", "5", MediaType.TEXT_PLAIN)
+            .andExpectBadRequest("Content-Type must be application/json")
+        assertEquals(5, quantityOf("widget"))
+    }
+
+    /** Stock is an Int; a total past Int.MAX_VALUE is an invalid request (400), not a 500, and nothing changes. */
+    @Test
+    fun `POST inventory rejects an add that would overflow the stock`() {
+        insert("widget", Int.MAX_VALUE - 1)
+
+        postInventory("widget", """{"quantity": 2}""")
+            .andExpectBadRequest("Quantity would exceed the maximum stock")
+        assertEquals(Int.MAX_VALUE - 1, quantityOf("widget"))
+    }
+
+    /** SKU ids match case-sensitively, so posting to `WIDGET` creates a separate SKU. */
+    @Test
+    fun `POST inventory is case-sensitive`() {
+        insert("widget", 5)
+
+        postInventory("WIDGET", """{"quantity": 2}""").andExpect {
+            status { isOk() }
+            content { json("""{"skuId": "WIDGET", "quantity": 2}""", JsonCompareMode.STRICT) }
+        }
+        assertEquals(5, quantityOf("widget"))
     }
 }

@@ -17,8 +17,8 @@ and checks items off as they are done. Newest decisions are recorded in the READ
       as a backstop (2026-09-23)
 - [x] Data-access library: **`JdbcClient`** (explicit SQL, immutable data classes) (2026-09-23)
 - [x] Controllers: **hand-written**, plus a contract-validation test that checks responses against inventory.yaml (2026-09-23)
-- [ ] Contract gaps: malformed/missing body, wrong `quantity` type, SKU id format/case,
-      integer overflow when adding stock
+- [x] Contract gaps for `POST`: exact case-sensitive SKUs, strict JSON (400), wrong Content-Type → 400,
+      overflow → 400; see README "Contract gaps (POST)" (2026-09-28)
 - [x] Schema migrations: **Flyway** (versioned plain-SQL migrations) (2026-09-23)
 
 ## Scaffold
@@ -43,7 +43,7 @@ and checks items off as they are done. Newest decisions are recorded in the READ
 - [ ] `GET /inventory/{skuId}`: 404 body `SKU not found: <skuId>` (text/plain), via `SkuNotFoundException` + `@RestControllerAdvice` (Robert, 2026-09-27). Tests written 2026-09-27 (4 repository, 4 controller); Robert writes the code. Done: `InventoryRepository.findBySkuId` (8/8 repository tests green, 2026-09-27, KDoc and `// Why:` comments done). Done: `error/SkuNotFoundException` (2026-09-27; `error` subpackage holds custom exceptions + the handler, Robert). Done: service `getInventory` (2026-09-27, `@throws` KDoc; commit 65c526c). Done: controller `getInventory` with `@GetMapping("/{skuId}")` + `@PathVariable` (2026-09-27). Done: `error/InventoryExceptionHandler` (`@RestControllerAdvice`, `handleSkuNotFound` → 404 text/plain; 15/15 tests green, commit 002a901, 2026-09-27). Study notes written 2026-09-27; error-handling decision recorded in the README. Walkthrough done 2026-09-28. Next: `/ship`
 - [x] `/walkthrough` of `GET /inventory/{skuId}` (2026-09-28; started `docs/learning/interview-prep.md`)
 - [ ] Optional: add a decoy row to the zero-stock `findBySkuId` / `GET /inventory/{skuId}` tests (today they pass even without a `WHERE` clause; offered 2026-09-28, not taken yet)
-- [ ] `POST /inventory/{skuId}` (create or add). Decide SKU case sensitivity first (options in the README's contract-gaps row)
+- [ ] `POST /inventory/{skuId}` (create or add). Contract gaps decided 2026-09-28 (README). Tests written 2026-09-28: 7 repository (`addStock`), 8 controller (incl. two parameterized), 2 concurrency (`InventoryConcurrencyTest`, `@RepeatedTest(5)`); Robert writes the code. Order: validation dependency → Jackson strictness in application.yml → `InventoryQuantity` → `addStock` → overflow exception → service `receiveInventory` → controller `@PostMapping` → four 400 handlers
 - [ ] `POST /inventory/{skuId}/purchase`
 - [ ] Contract-validation test: check MockMvc responses against inventory.yaml (decided with the
       Controllers decision; do it once there is more than one endpoint to validate)
@@ -74,8 +74,9 @@ class of bug. Each item below is also a teaching topic for a walkthrough.
       final = initial + sum(received) − sum(successful purchases).
 - [ ] **New-SKU creation race.** Concurrent first-time `POST`s for a SKU that doesn't exist yet.
       All succeed, no duplicate-key errors, final = sum of all quantities.
+      (test written in `InventoryConcurrencyTest` 2026-09-28, plus a lost-update race on an existing SKU; passes once `addStock` exists)
 - [ ] **Repeat to flush out flakiness.** Run the race tests many times (`@RepeatedTest`), since
-      concurrency bugs are intermittent.
+      concurrency bugs are intermittent. (receive races use `@RepeatedTest(5)`, 2026-09-28)
 - [ ] **Negative control.** Temporarily swap in a naive read-then-write implementation and show
       the race test *fails*. This proves the test can actually detect an oversell.
 

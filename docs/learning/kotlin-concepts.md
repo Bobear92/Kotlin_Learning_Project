@@ -48,6 +48,12 @@ and `/walkthrough` add rows as new concepts come up.
 | No ternary; `if` is an expression | Java's `c ? a : b` is `if (c) a else b`; `?:` (Elvis) only tests for `null` | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
 | String templates | `"SKU not found: $skuId"`, and `${expr}` for anything longer than a name | [SkuNotFoundException.kt](notes/main/inventory/error/SkuNotFoundException.kt.md) |
 | Nullable values from Java | `Throwable.message` is `String?` because `getMessage()` may return null | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
+| Default arguments | `fun f(x: T = default)`: callers may leave the argument out; replaces Java overloads | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
+| Array literals in annotations | `@ValueSource(ints = [0, -5])`; Java writes `{0, -5}` | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
+| Generic functions and function types | `fun <T> race(action: (Int) -> T)`: a type parameter plus a parameter that holds a function | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
+| Ranges `..` and `until` | `1..n` includes `n`, `0 until n` excludes it; both work with `map`, `sum` | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
+| `runCatching` and `Result` | Runs a block and captures success or exception as a value, nothing thrown | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
+| Implicit lambda parameter `it` | A one-parameter lambda can leave the parameter out and use `it` | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
 
 ## Spring
 
@@ -83,6 +89,10 @@ and `/walkthrough` add rows as new concepts come up.
 | Exception resolver chain | Spring catches every controller exception: `@ExceptionHandler` (controller, then advice) → `@ResponseStatus` → built-in mappings → `500` | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
 | When mistakes surface | Compile time (types), startup (missing beans), first request (strings: paths, SQL, missing advice); only request-level tests catch the last | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
 | `ResponseEntity` builder | `status(...).contentType(...).body(...)` sets status, headers and body; `notFound()` has no body | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
+| `@ParameterizedTest` + `@ValueSource` | One test method run once per supplied value, each reported separately | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
+| `@RepeatedTest` | Runs a test N times; used for intermittent concurrency bugs | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
+| Test transactions are per thread | A `@JdbcTest` rollback covers only the test thread; worker threads commit on their own connections | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
+| Start gate (`CountDownLatch`) | Hold N threads at one line, then release them together so they really overlap | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
 
 ## Database and API design
 
