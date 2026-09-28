@@ -4,8 +4,8 @@ package com.robertwoolbright.inventory.inventory
 
 import jakarta.validation.constraints.Min
 
-/** One Inventory quantity; Used as a request body for POST /inventory/{skuId}. */
+/** One inventory quantity; used as the request body for POST /inventory/{skuId}. */
 data class InventoryQuantity(
-    // Contract: The contract requires the minimum value for the InventoryQuantity object to be 1.
+    // Contract: quantity has minimum: 1 in inventory.yaml.
     @Min(1, message = "quantity must be at least 1") val quantity: Int
     )

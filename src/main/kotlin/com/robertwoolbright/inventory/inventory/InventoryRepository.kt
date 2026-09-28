@@ -34,10 +34,13 @@ class InventoryRepository(
             .list().singleOrNull()
             
     
-    /** Adds an item into the database with an SKU and quantity. Will update the quantity if SKU already exists. Returns the row after the change with the new total. Only chance of it returning null is if its goes past the max value for an Int and nothing would be changed. Quantity must be at least 1. */
+    /**
+     * Adds quantity to a SKU's stock, creating the SKU if it doesn't exist yet, and returns the row with the new total.
+     * Returns null, changing nothing, only if the new total would go past Int.MAX_VALUE. Quantity must be at least 1.
+     */
     fun addStock(skuId: String, quantity: Int): InventoryItem? = jdbcClient.sql(
-    // Why: We have one upsert sql instead of find then insert so we don't deal with requests racing. 
-    // Why: The WHERE column we have the Overflow guard where guard written as current ≤ max − new because current + new would itself overflow in Postgres.
+    // Why: one upsert instead of find-then-insert, so concurrent requests can't race each other.
+    // Why: the overflow guard in the WHERE clause is written as current <= MAX - new, because current + new would itself overflow in Postgres.
         """ 
             INSERT INTO inventory (sku_id, quantity)  
                 VALUES (:skuId, :quantity) 

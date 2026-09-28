@@ -61,7 +61,7 @@ class InventoryExceptionHandler{
             .body("Invalid request body")
     
             
-    // Contract: paths./inventory/{skuId}.post - when the content type is not application/json we return a 400 text/plain..
+    // Contract: paths./inventory/{skuId}.post - when the content type is not application/json we return a 400 text/plain.
     
     /** Returns a 400 text/plain response with the fixed text Content-Type must be application/json.*/      
     @ExceptionHandler(HttpMediaTypeNotSupportedException::class)
