@@ -185,6 +185,8 @@ teaching lives next to it in study notes:
   line with Claude, answer check-your-understanding questions, and log the session in
   [docs/learning/walkthroughs/](docs/learning/walkthroughs/). New concepts are indexed in
   [docs/learning/kotlin-concepts.md](docs/learning/kotlin-concepts.md).
+- **Interview prep.** Questions I expect in the follow-up interview, with folded answers, grow
+  during each walkthrough in [docs/learning/interview-prep.md](docs/learning/interview-prep.md).
 
 ## AI-assisted development
 

@@ -296,6 +296,14 @@ for the reason in the `// Why:` comment: `sku_id` is the primary key, so the dat
 rows with the same SKU. As with `findAll`, the migration's constraints are what make the Kotlin code
 correct.
 
+**The failure mode, traced end to end** (walkthrough, 2026-09-28): if the primary key were dropped
+and two `widget` rows existed, `singleOrNull()` would return `null`, the service would throw
+`SkuNotFoundException`, and the client would get `404 SKU not found: widget` for a SKU that exists
+twice. The bug would be silent. Swapping in `.single()` would make it loud (a 500), but `.single()`
+also throws on zero rows, the normal "not found" case. A lookup that allowed duplicates would need
+all three cases spelled out: empty → `null`, one → the item, more → an error. The real fix is
+keeping the primary key. See [interview prep](../../../interview-prep.md#what-happens-if-two-rows-ever-share-the-same-sku).
+
 **Why not `JdbcClient`'s own `.optional()`:** the query spec also has `.optional()`, which returns a
 Java `Optional<InventoryItem>`. Kotlin code would then convert it with `.orElse(null)` or
 `.getOrNull()`. `.list().singleOrNull()` gets `InventoryItem?` directly, and a nullable type is the

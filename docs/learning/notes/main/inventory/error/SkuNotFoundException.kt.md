@@ -56,6 +56,28 @@ superclass call), and then it's gone. `exception.skuId` doesn't compile. Compare
 which keeps the value as a field. The SKU survives only inside the message text, which is all the
 handler needs.
 
+**Kotlin (storage vs visibility, two separate settings):** `private val` combines two keywords that
+answer different questions. They are easy to mix up (the 2026-09-28 walkthrough first tried
+`private` to make `ex.skuId` reachable, which does the opposite):
+
+| Setting | Keyword | Question it answers |
+| --- | --- | --- |
+| Storage | `val` / `var` | Is the value kept on the object after the constructor runs? |
+| Visibility | `private` / none (public) | Who can read it once it's kept? |
+
+```kotlin
+class SkuNotFoundException(skuId: String)              // not stored      → ex.skuId: compile error
+class SkuNotFoundException(val skuId: String)          // stored, public  → ex.skuId works anywhere
+class SkuNotFoundException(private val skuId: String)  // stored, private → only inside this class
+class SkuNotFoundException(private skuId: String)      // doesn't compile: nothing is stored to hide
+```
+
+So the one-word change that makes `ex.skuId` compile in the handler is `val`. The layers use
+`private val` for the opposite reason: each one stores its dependency, and hides it so the layer above
+can't skip past it. `inventoryService.inventoryRepository.findBySkuId(...)` from the controller
+fails with *"Cannot access 'inventoryRepository': it is private in 'InventoryService'"*, so the
+compiler keeps the controller from bypassing the service's `null` → `SkuNotFoundException` logic.
+
 **Kotlin (string templates):** `"SKU not found: $skuId"` inserts the value of `skuId` into the string.
 It's Java's `"SKU not found: " + skuId`. For anything more than a plain name, use braces:
 `"${item.skuId}"` or `"${skuId.uppercase()}"`. Without braces, `$item.skuId` would insert `item`

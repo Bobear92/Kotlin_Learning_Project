@@ -44,6 +44,8 @@ and `/walkthrough` add rows as new concepts come up.
 | KDoc block tags (`@throws`) | Tags start their own line; `@throws` is how a signature announces an exception without checked exceptions | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
 | Extending a class | `class A(x: T) : B(...)` = `extends B` plus the `super(...)` call | [SkuNotFoundException.kt](notes/main/inventory/error/SkuNotFoundException.kt.md) |
 | Plain constructor parameters | No `val`/`var` = usable only during construction, not a property | [SkuNotFoundException.kt](notes/main/inventory/error/SkuNotFoundException.kt.md) |
+| Storage vs visibility | `val` decides whether a constructor parameter is kept; `private` decides who can read it. `private val` enforces the layers | [SkuNotFoundException.kt](notes/main/inventory/error/SkuNotFoundException.kt.md) |
+| No ternary; `if` is an expression | Java's `c ? a : b` is `if (c) a else b`; `?:` (Elvis) only tests for `null` | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
 | String templates | `"SKU not found: $skuId"`, and `${expr}` for anything longer than a name | [SkuNotFoundException.kt](notes/main/inventory/error/SkuNotFoundException.kt.md) |
 | Nullable values from Java | `Throwable.message` is `String?` because `getMessage()` may return null | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
 
@@ -78,6 +80,8 @@ and `/walkthrough` add rows as new concepts come up.
 | `@PathVariable` and path templates | `@GetMapping("/{skuId}")` matches one path segment and binds it to the same-named parameter | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
 | Domain exceptions | The service throws a domain error (`SkuNotFoundException`); a handler decides the HTTP status | [SkuNotFoundException.kt](notes/main/inventory/error/SkuNotFoundException.kt.md) |
 | `@RestControllerAdvice` + `@ExceptionHandler` | One class that catches exceptions from every controller; within a class the closest exception type wins, across advice classes their `@Order` decides first | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
+| Exception resolver chain | Spring catches every controller exception: `@ExceptionHandler` (controller, then advice) → `@ResponseStatus` → built-in mappings → `500` | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
+| When mistakes surface | Compile time (types), startup (missing beans), first request (strings: paths, SQL, missing advice); only request-level tests catch the last | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
 | `ResponseEntity` builder | `status(...).contentType(...).body(...)` sets status, headers and body; `notFound()` has no body | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
 
 ## Database and API design

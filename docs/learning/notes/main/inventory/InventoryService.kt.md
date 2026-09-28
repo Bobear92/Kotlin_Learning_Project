@@ -107,7 +107,9 @@ fun getInventory(skuId : String) : InventoryItem = inventoryRepository.findBySku
 **Kotlin (the Elvis operator `?:`):** `a ?: b` means "`a`, unless `a` is `null`, then `b`".
 `findBySkuId` returns `InventoryItem?`. If it's an item, that item is the result. If it's `null`,
 the right-hand side runs. (The name comes from the operator turned sideways, which looks like
-Elvis's quiff.) The Java equivalent is:
+Elvis's quiff.) It is **not a ternary**, though it looks like half of one (Robert called it that in the
+2026-09-28 walkthrough). Kotlin has no ternary at all: `if` is an expression, so Java's
+`cond ? a : b` is written `if (cond) a else b`. Elvis only ever tests for `null`. The Java equivalent is:
 
 ```java
 InventoryItem item = inventoryRepository.findBySkuId(skuId);
@@ -140,6 +142,15 @@ inline it isn't recognized.)
 - The **controller** stays a one-liner. It never sees the `null` or the exception. The exception
   passes through it to Spring, and [`InventoryExceptionHandler`](error/InventoryExceptionHandler.kt.md)
   maps it to `404`. So the service knows nothing about status codes.
+
+**What if the `null` were passed up instead?** (walkthrough, 2026-09-28) Declaring
+`getInventory(...): InventoryItem? = inventoryRepository.findBySkuId(skuId)` compiles: Kotlin only
+objects when a nullable value is *used* as non-null (`item.quantity`, or returning it as
+`InventoryItem`). Passing a "maybe" out as a "maybe" claims nothing false. If the controller then
+returned `InventoryItem?` too, Spring would get `null` and write no body: `200 OK`, empty, for a SKU
+that doesn't exist, with no NPE and no error. The controller test's `isNotFound()` check would fail.
+The non-null return type is what makes the compiler demand the Elvis, and it keeps `null` from
+reaching Spring, which is outside the compiler's reach.
 
 **Kotlin:** the spaces in `skuId : String` and `) : InventoryItem` are legal and change nothing.
 

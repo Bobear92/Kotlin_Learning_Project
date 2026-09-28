@@ -96,7 +96,14 @@ fun handleSkuNotFound(ex: SkuNotFoundException ): ResponseEntity<String> =
 subclass of it). When a controller method throws, Spring's `DispatcherServlet` asks its exception
 resolvers for a match, in this order:
 1. an `@ExceptionHandler` inside the controller class itself,
-2. then `@ExceptionHandler`s in `@ControllerAdvice` beans, like this one.
+2. then `@ExceptionHandler`s in `@ControllerAdvice` beans, like this one,
+3. then `@ResponseStatus` on the exception class and `ResponseStatusException`,
+4. then Spring's built-in mappings (e.g. a malformed request → `400`),
+5. and if nothing matches, a `500` with Spring Boot's default JSON error body.
+
+Spring catches *every* exception, custom or not: the advice isn't where Spring looks when it
+"doesn't recognize" an exception (the 2026-09-28 walkthrough's first framing). It just gets a
+custom exception handled at step 2 instead of falling through to the `500` at step 5.
 
 Within one class, if several handlers match, the one for the *closest* exception type wins, so a
 later `@ExceptionHandler(RuntimeException::class)` in this class wouldn't steal this one's

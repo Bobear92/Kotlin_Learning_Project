@@ -175,6 +175,13 @@ compiler's `javaParameters` option, and Spring can also read Kotlin's own metada
 write `@PathVariable("skuId") id: String`. Spring also URL-decodes the segment first, so a request
 for `/inventory/caf%C3%A9` arrives as `café`.
 
+**When a name mismatch fails** (walkthrough, 2026-09-28): `@GetMapping("/{skuId}")` with
+`@PathVariable sku: String` compiles, because `"/{skuId}"` is just a string to the compiler, and the
+app starts, because Spring doesn't compare placeholders with parameters when it registers the mapping.
+It fails on the first request: Spring throws `MissingPathVariableException` and answers `500`, since
+it's a server bug, not a client mistake. Only a test that sends a real request through MockMvc
+catches it; calling `controller.getInventory("widget")` directly would skip path matching and pass.
+
 **Kotlin (annotating a parameter):** an annotation can sit directly in front of a parameter,
 inside the parentheses, the same as in Java.
 
