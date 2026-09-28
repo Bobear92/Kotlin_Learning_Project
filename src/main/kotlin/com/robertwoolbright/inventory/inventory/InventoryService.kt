@@ -3,6 +3,7 @@
 package com.robertwoolbright.inventory.inventory
 
 
+import com.robertwoolbright.inventory.inventory.error.AddStockOverflowException
 import com.robertwoolbright.inventory.inventory.error.SkuNotFoundException
 import org.springframework.stereotype.Service
 
@@ -21,4 +22,9 @@ class InventoryService(
      */
     fun getInventory(skuId : String) : InventoryItem = inventoryRepository.findBySkuId(skuId) ?: throw SkuNotFoundException(skuId)
     
+    /**
+     * Adds quantity to the SKU's stock, creating the SKU if it's new, and returns the new total.
+     * @throws AddStockOverflowException if the add would push the stock past Int.MAX_VALUE.
+     */
+    fun receiveInventory(skuId : String, quantity: Int) : InventoryItem = inventoryRepository.addStock(skuId, quantity) ?: throw AddStockOverflowException()
 }
