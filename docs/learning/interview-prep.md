@@ -103,6 +103,73 @@ the truth is "we don't know".
 Notes: [InventoryService.kt](notes/main/inventory/InventoryService.kt.md)
 </details>
 
+## API design and validation
+
+### How does your API validate input?
+
+<details>
+<summary>Answer</summary>
+
+Two checks, in order, each with its own 400 message:
+
+| Check | Runs in | Catches | Response |
+| --- | --- | --- | --- |
+| **1. Is it an `Int` at all?** | Jackson, while reading the body | malformed JSON, missing or `null` `quantity`, `"5"`, `1.5`, a number too big for `Int` | 400 `Invalid request body` |
+| **2. Does the value follow the rules?** | Bean Validation (`@Min(1)` + `@Valid`), after Jackson succeeds | `0`, `-5` | 400 `quantity must be at least 1` |
+
+Jackson has to build the object before validation can check it, so `{"quantity": 0}` passes check 1
+and fails check 2, and `{"quantity": 1.5}` never reaches check 2. The messages tell the client
+different things: "you didn't send valid input" vs "your input broke a rule".
+
+Jackson's defaults are lenient: they'd turn `"5"` into 5 and silently truncate `1.5` to 1. Two
+settings in `application.yml` turn that off (`accept-float-as-int`, `allow-coercion-of-scalars`),
+because a stock count must be exactly what the client sent, never a guess. A wrong `Content-Type`
+is a third, earlier check (400 instead of Spring's 415, which the contract doesn't list).
+
+Notes: [application.yml, strict JSON](notes/main/resources/application.yml.md#strict-json-the-jackson-block)
+</details>
+
+### Stock can be 0. Why does the request require a quantity of at least 1?
+
+<details>
+<summary>Answer</summary>
+
+They're two different quantities with two schemas in the contract:
+
+| Schema | `quantity` means | Rule |
+| --- | --- | --- |
+| `InventoryQuantity` (request body) | how many units to add or remove **in this operation** | `minimum: 1` |
+| `InventoryItem` (response, what's stored) | how many units are **on hand** | `minimum: 0` |
+
+A stock level of 0 is normal: sold out. `CHECK (quantity >= 0)` allows it, and `GET` returns
+`{"quantity": 0}` for it. A *delivery* of 0 units is a no-op or a client bug, so it's rejected.
+The rule also closes a side door: without it, receiving 0 would create a SKU without receiving any
+stock. Negatives matter more: receiving -5 would be an untracked purchase that skips the
+insufficient-stock check, and the overflow guard in `addStock` assumes quantity >= 1.
+
+Notes: [application.yml, strict JSON](notes/main/resources/application.yml.md#strict-json-the-jackson-block)
+</details>
+
+### How would you add a new product that has no stock yet?
+
+<details>
+<summary>Answer</summary>
+
+Not through this API, by design. The contract creates a SKU only as a side effect of receiving
+stock ("If the SKU does not yet exist in inventory, it is created"), and `minimum: 1` rules out a
+zero delivery.
+
+"We sell this product" is a **catalog** fact; "we have N on hand" is an **inventory** fact. The
+catalog would be a `product` table, with `inventory.sku_id` as a foreign key to it, or at a company
+Nuuly's size often its own service, sharing only the SKU id. "In the catalog, no inventory row yet"
+is exactly the new, never-stocked product.
+
+If this service had to register SKUs, it would get a separate endpoint. Relaxing `minimum: 1`
+would make "receive" mean two things and break the contract. One consequence to know: a `404`
+from `GET` can't tell "unknown product" from "never stocked", which is fine for inventory, because
+you can't sell either.
+</details>
+
 ## Kotlin
 
 ### What does the `?` in `InventoryItem?` mean, and how is it different from Java's `Optional`?

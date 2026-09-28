@@ -63,6 +63,9 @@ and `/walkthrough` add rows as new concepts come up.
 | Starters and the Boot BOM | Starters bundle dependencies; the dependency-management plugin supplies versions | [build.gradle.kts](notes/build.gradle.kts.md) |
 | Docker Compose support | `bootRun` starts compose.yaml and wires the DataSource | [compose.yaml](notes/compose.yaml.md) |
 | Property source precedence | Command line > environment variables > application.yml > defaults; relaxed binding maps `SPRING_DATASOURCE_URL` to `spring.datasource.url` | [application.yml](notes/main/resources/application.yml.md) |
+| YAML map properties | `spring.jackson.deserialization:` binds its children into a `Map<Feature, Boolean>`; each indent level is one segment of the dotted name | [application.yml](notes/main/resources/application.yml.md#strict-json-the-jackson-block) |
+| Strict JSON (Jackson 3) | `accept-float-as-int` / `allow-coercion-of-scalars` off, so `1.5` and `"5"` are 400s instead of guesses; a non-null `Int` rejects `{}` and `null` | [application.yml](notes/main/resources/application.yml.md#strict-json-the-jackson-block) |
+| Bean Validation starter | `spring-boot-starter-validation`: `jakarta.validation` annotations + Hibernate Validator, run on `@Valid @RequestBody` | [build.gradle.kts](notes/build.gradle.kts.md) |
 | Connection details | Compose / Testcontainers supply the DB connection, overriding `spring.datasource.*` | [application.yml](notes/main/resources/application.yml.md) |
 | Test context caching | Identical test configurations share one context (and container) until the run ends | [TestcontainersConfiguration.kt](notes/test/support/TestcontainersConfiguration.kt.md) |
 | `@TestConfiguration` + `@Import` | Test-only beans that component scanning skips | [TestcontainersConfiguration.kt](notes/test/support/TestcontainersConfiguration.kt.md) |
