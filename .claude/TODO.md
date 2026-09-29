@@ -52,6 +52,8 @@ and checks items off as they are done. Newest decisions are recorded in the READ
       Order: `PurchaseResult` → `removeStock` → `InsufficientInventoryException` → service `purchaseInventory` → controller → handler.
       Done: `PurchaseResult` sealed interface (2026-09-29). Done: `InventoryRepository.removeStock` (CTE; `Int?` via
       `getObject(…, Int::class.javaObjectType)` so NULL ≠ 0; compiles, tests blocked until the service compiles, 2026-09-29)
+      Done: `InsufficientInventoryException` + `InventoryService.purchaseInventory` (d6234d6, 2026-09-29; repository 22/22
+      and service 9/9 green). Next: controller route, then the handler.
 - [ ] Contract-validation test: check MockMvc responses against inventory.yaml (decided with the
       Controllers decision; do it once there is more than one endpoint to validate)
 - [ ] Decide on demo seed data for a running app, once `POST /inventory/{skuId}` exists
