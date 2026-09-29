@@ -35,13 +35,13 @@ class InventoryService(
     }
     
     /** 
-     * Removes quantity from a SKU's stock during a purchase. Returns the new InventoryItem on a success.
+     * Removes quantity from a SKU's stock during a purchase. Returns the remaining InventoryItem on a success.
      * @throws SkuNotFoundException when no sku is found.
      * @throws InsufficientInventoryException if not enough quantity for the purchase.
      * @throws IllegalArgumentException if quantity is less than 1 (a caller bug, so it surfaces as a 500).
      */
     fun purchaseInventory(skuId: String, quantity: Int): InventoryItem {
-        // Why: @Valid only protects HTTP requests; this also stops direct callers (Cant have a 0 quantity in a purchase and a negative value would add stock. ).
+        // Why: @Valid only protects HTTP requests; this also stops direct callers (Can't have a 0 quantity in a purchase and a negative value would add stock.).
         require(quantity >= 1) {"quantity must be at least 1, was $quantity"}
         return when (val purchaseOutcome = inventoryRepository.removeStock(skuId,quantity)){
                 is PurchaseResult.Purchased -> purchaseOutcome.item

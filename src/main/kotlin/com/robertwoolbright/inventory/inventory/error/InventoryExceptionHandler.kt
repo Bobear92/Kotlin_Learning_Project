@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice
 @RestControllerAdvice
 class InventoryExceptionHandler{
 
-    // Contract: paths./inventory/{skuId}.get - 404 with text/plain when SkuNotFoundException is thrown.
+    // Contract: paths./inventory/{skuId}.get and paths./inventory/{skuId}/purchase.post - 404 with text/plain when SkuNotFoundException is thrown.
     
     /** Returns a 404 text/plain response whose body is the exception's message. */
     @ExceptionHandler(SkuNotFoundException::class)
@@ -39,7 +39,7 @@ class InventoryExceptionHandler{
             .body(ex.message ?: "Overflow Guard Triggered")
     
             
-    // Contract: paths./inventory/{skuId}.post - a request body that fails validation is a 400 text/plain.
+    // Contract: paths./inventory/{skuId}.post and paths./inventory/{skuId}/purchase.post - a request body that fails validation is a 400 text/plain.
     
     /** Returns a 400 text/plain response from the failing field's validation message.*/              
     @ExceptionHandler(MethodArgumentNotValidException::class)
@@ -50,7 +50,7 @@ class InventoryExceptionHandler{
             .body(ex.bindingResult.fieldError?.defaultMessage ?: "Invalid request")
        
             
-    // Contract: paths./inventory/{skuId}.post - when the request body is invalid we return a 400 text/plain.
+    // Contract: paths./inventory/{skuId}.post and paths./inventory/{skuId}/purchase.post - when the request body is invalid we return a 400 text/plain.
     
     /** Returns a 400 text/plain response with the fixed text Invalid request body.*/             
     @ExceptionHandler(HttpMessageNotReadableException::class)
@@ -61,7 +61,7 @@ class InventoryExceptionHandler{
             .body("Invalid request body")
     
             
-    // Contract: paths./inventory/{skuId}.post - when the content type is not application/json we return a 400 text/plain.
+    // Contract: paths./inventory/{skuId}.post and paths./inventory/{skuId}/purchase.post - when the content type is not application/json we return a 400 text/plain.
     
     /** Returns a 400 text/plain response with the fixed text Content-Type must be application/json.*/      
     @ExceptionHandler(HttpMediaTypeNotSupportedException::class)
@@ -70,4 +70,15 @@ class InventoryExceptionHandler{
         ResponseEntity.status(HttpStatus.BAD_REQUEST)
             .contentType(MediaType.TEXT_PLAIN)
             .body("Content-Type must be application/json")
+          
+            
+    // Contract: paths./inventory/{skuId}/purchase.post - when there is insufficient inventory for a purchase call we return 400 text/plain.
+              
+    /** Returns a 400 text/plain response with the message from the exception: Insufficient inventory for <skuId> */
+    @ExceptionHandler(InsufficientInventoryException::class)
+    fun handleInsufficientInventory(ex: InsufficientInventoryException): ResponseEntity<String> =
+
+        ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            .contentType(MediaType.TEXT_PLAIN)
+            .body(ex.message ?: "Insufficient Inventory")
 }
