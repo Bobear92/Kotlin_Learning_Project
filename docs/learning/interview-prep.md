@@ -103,6 +103,71 @@ the truth is "we don't know".
 Notes: [InventoryService.kt](notes/main/inventory/InventoryService.kt.md)
 </details>
 
+### Why one upsert instead of "look up the row, then insert or update"?
+
+<details>
+<summary>Answer</summary>
+
+Find-then-write makes the decision in Kotlin, between two trips to the database, and another
+request can change the row in that gap. With `widget` at 5 and two requests for +3 and +4 arriving
+together:
+
+| Time | Request A (+3) | Request B (+4) | Row |
+| --- | --- | --- | --- |
+| 1 | reads 5 | | 5 |
+| 2 | | reads 5 | 5 |
+| 3 | writes 8 | | 8 |
+| 4 | | writes 9 | **9**, should be 12 |
+
+That's a **lost update**, and it's silent. For a new SKU, both see "no row", both `INSERT`, and one
+fails with a duplicate-key error. `INSERT ... ON CONFLICT DO UPDATE` puts the decision inside one
+statement: Postgres runs it atomically and locks the row while it changes it. `RETURNING` gives back
+the new total from the same statement, so there's no second `SELECT` to race either.
+
+`InventoryConcurrencyTest` proves it: 50 threads released together through a `CountDownLatch`
+start gate, repeated 5 times. With find-then-write, the total would come out **too low and
+different on every run**, and the new-SKU test would collect duplicate-key exceptions.
+
+Notes: [InventoryRepository.kt, `addStock`](notes/main/inventory/InventoryRepository.kt.md#addstock-the-signature-and-the-two-decisions)
+</details>
+
+### Doesn't that row lock slow the service down?
+
+<details>
+<summary>Answer</summary>
+
+No. It's the cheaper option:
+- The lock is on **one row**, so different SKUs never wait for each other.
+- It's held for one statement, well under a millisecond.
+- Find-then-write needs two round trips, and making it *correct* (a transaction plus
+  `SELECT ... FOR UPDATE`) holds a lock across both trips and the Kotlin in between, which is longer.
+
+Where it would hurt: one extremely hot SKU taking thousands of writes a second queues on one row.
+That's a scale problem with its own fixes (batching writes, splitting the counter across rows), far
+beyond this app.
+
+Notes: [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#addstock-the-signature-and-the-two-decisions)
+</details>
+
+### Why is the overflow guard written as `current <= MAX - new`?
+
+<details>
+<summary>Answer</summary>
+
+The column is a 4-byte Postgres `integer`, like Kotlin's `Int`. The natural form,
+`current + new <= MAX`, has to compute `current + new` first, and when the total is too big
+Postgres stops with `ERROR: integer out of range`: a `500` instead of a refusal. It can answer
+"true" or crash, never "false". Moving `new` to the other side keeps every value in range, so the
+comparison completes. When it's false, the update is skipped, `RETURNING` returns no row,
+`singleOrNull()` gives `null`, and the service throws `AddStockOverflowException` → `400`, with the
+stock unchanged.
+
+It relies on `new >= 1`: with `-5`, `MAX - (-5)` is `MAX + 5`, which overflows. The repository's
+KDoc states that precondition, and the service's `require` enforces it.
+
+Notes: [InventoryRepository.kt, the overflow guard](notes/main/inventory/InventoryRepository.kt.md#the-overflow-guard)
+</details>
+
 ## API design and validation
 
 ### How does your API validate input?
@@ -168,6 +233,42 @@ If this service had to register SKUs, it would get a separate endpoint. Relaxing
 would make "receive" mean two things and break the contract. One consequence to know: a `404`
 from `GET` can't tell "unknown product" from "never stocked", which is fine for inventory, because
 you can't sell either.
+</details>
+
+### `@Valid` already rejects 0. Why check again with `require` in the service?
+
+<details>
+<summary>Answer</summary>
+
+`@Valid` only protects the HTTP entry point. The service is a public function that a test, a
+scheduled job or the purchase code can call directly, and before the `require`,
+`receiveInventory("new-sku", 0)` created an empty SKU. Each check has a different audience:
+
+| Check | Catches | Status |
+| --- | --- | --- |
+| `@Valid` + `@Min` | a bad client request | 400: the client's fault |
+| `require` | a bad call from our own code | 500: our bug |
+| DB `CHECK (quantity >= 0)` | anything past both | 500 |
+
+That's why nothing maps `IllegalArgumentException` to 400: if it fires, the mistake is ours.
+`InventoryServiceTest` calls the service directly to prove it.
+
+Notes: [InventoryService.kt](notes/main/inventory/InventoryService.kt.md#receiveinventory-a-precondition-and-a-block-body)
+</details>
+
+### Creating a SKU returns 200, not 201, and a wrong Content-Type is 400, not 415. Why?
+
+<details>
+<summary>Answer</summary>
+
+REST convention says `201 Created` and `415 Unsupported Media Type`, but the contract lists only
+`200` and `400` for this endpoint, and clients are written against the contract. **The contract
+wins**; the README's "Contract gaps (POST)" records the decision. The `200` is Spring's default for a
+plain return value, pinned by `status { isOk() }` in the controller test. The `400` needs our own
+handler, because without it Spring's built-in resolver answers `HttpMediaTypeNotSupportedException`
+with `415` and a JSON body.
+
+Notes: [InventoryController.kt](notes/main/inventory/InventoryController.kt.md#post-inventoryskuid)
 </details>
 
 ## Kotlin
@@ -362,6 +463,21 @@ The handler returns `ResponseEntity<String>`, not `String`, because a plain retu
 (Spring would send 200). `ResponseEntity` sets status (404), content type (`text/plain`) and body.
 `ex.message ?: "..."` is needed because `Throwable.message` is declared `String?`: the compiler
 can't know our subclass always sets it.
+
+Notes: [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md)
+</details>
+
+### Why don't your handlers send Spring's `ex.message` to the client?
+
+<details>
+<summary>Answer</summary>
+
+Spring's messages are written for developers. A validation failure's `ex.message` includes the full
+controller method signature, package and class names: an **information leak** to anyone who sends a
+bad request. So the validation handler sends only the `@Min` message we wrote
+(`ex.bindingResult.fieldError?.defaultMessage`: "default" is misleading, it's ours), and the other two
+handlers send fixed strings. `handleInvalidRequestBody` doesn't even take the exception as a
+parameter, because it never reads it.
 
 Notes: [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md)
 </details>

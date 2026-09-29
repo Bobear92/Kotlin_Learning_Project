@@ -1,6 +1,6 @@
 # InventoryQuantity.kt
 
-> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryQuantity.kt](../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryQuantity.kt) · Last synced with code: 2026-09-28
+> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryQuantity.kt](../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryQuantity.kt) · Last synced with code: 2026-09-29
 
 ## Role
 
@@ -89,6 +89,27 @@ came up); a comment between KDoc and `data class` would have detached the KDoc.
 **Naming:** the class name matches the contract's schema name, `InventoryQuantity`. The file was
 first named `ItemQuantity.kt`; Kotlin allows a file name that differs from its class, but the
 convention is to match them when a file holds one class.
+
+### Predicting the response (walkthrough, 2026-09-29)
+
+Two gates stand between the JSON and the controller function. **Gate 1 (Jackson) asks "is this the
+right type?"; Gate 2 (Bean Validation) asks "is the value allowed?"** Gate 2 can only run once Gate 1
+has built an object, so the `@Min` message is never sent for a body that fails Gate 1.
+
+| Body | Stopped at | Response |
+| --- | --- | --- |
+| `{"quantity": null}` | Gate 1: a non-null `Int` can't hold `null`, so Jackson can't build the object | `400 Invalid request body` |
+| `{"quantity": "7"}` | Gate 1: a string, and `allow-coercion-of-scalars` is off | `400 Invalid request body` |
+| `{"quantity": 0}` | Gate 2: 0 is an `Int`, so the object is built; then `@Min(1)` fails | `400 quantity must be at least 1` |
+| `{"quantity": 7}` | passes both | `200` with the new total as JSON |
+
+In Robert's words: "Quantity of 0 gets sent to our handler and `handleValidationFailure` is called
+with the message below. Quantity of null: Jackson can't build the object." To be precise about the
+second case, Jackson **throws** `HttpMessageNotReadableException`, and Spring **calls**
+`handleInvalidRequestBody` to answer it. Exceptions are thrown; handlers are called.
+
+**A common slip:** a client *can* send `null`, but the missing `?` is what makes Kotlin and Jackson
+**refuse** it. The type isn't saying "null never arrives"; it's saying "if null arrives, reject the request".
 
 ## Check your understanding
 

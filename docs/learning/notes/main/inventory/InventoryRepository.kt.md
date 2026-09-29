@@ -1,6 +1,6 @@
 # InventoryRepository.kt
 
-> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepository.kt](../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepository.kt) · Last synced with code: 2026-09-28
+> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepository.kt](../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepository.kt) · Last synced with code: 2026-09-29
 
 ## Role
 
@@ -365,6 +365,25 @@ For a new SKU it's worse: both see "no row", both `INSERT`, and the second fails
 error. A single SQL statement can't be interleaved like this: Postgres runs it atomically and locks
 the row while it changes it. `InventoryConcurrencyTest` proves both cases.
 
+**Where the decision lives** (walkthrough, 2026-09-29): in the two-step version, the decision
+("does it exist? add or insert?") is made in **Kotlin, outside the SQL**, between two trips to the
+database. The database sees two unrelated statements and doesn't hold anything for us in between.
+In the upsert, `ON CONFLICT` *is* the `if`, and Postgres makes the decision inside one statement.
+The rule: if Kotlin reads a value and then writes based on it, there's a gap. Moving the decision
+into one SQL statement closes it. Purchase needs the same thing: "subtract only if there's enough"
+has to live in the SQL.
+
+**Does the lock slow things down?** (Robert's question, 2026-09-29) Not in practice:
+- Postgres locks **one row**, not the table. Two requests for `widget` queue; `widget` and `gadget`
+  run in parallel.
+- The lock is held only while one statement runs, typically well under a millisecond.
+- The two-step version is slower even when nothing collides: two round trips instead of one. Making
+  it correct (a transaction plus `SELECT ... FOR UPDATE`) holds the lock across both round trips
+  and the Kotlin in between, which is *longer* than the upsert's lock.
+
+It only hurts with one extremely hot SKU (thousands of writes a second to a single row), and that
+scale problem has its own fixes (batching, splitting the counter across rows).
+
 ### The upsert
 
 ```kotlin
@@ -413,6 +432,10 @@ proposed row" if the `VALUES` ever change.)
 `RETURNING` makes the write return the changed row, like a `SELECT`, in the same statement. That's
 how the endpoint gets the new total without a second query, which could see another request's
 change. It must list columns (or `*`); Robert's first version had none.
+
+**Without `RETURNING` at all:** the statement returns only a row count, but `.query { }` expects
+rows. The Postgres driver throws `No results were returned by the query`, Spring wraps it in a
+`DataAccessException`, and every POST gets a `500`. The compiler can't see it, because SQL is a string.
 
 **Contract:** the `200` body is "the updated inventory state for the SKU", which is exactly the
 row `RETURNING` gives back.

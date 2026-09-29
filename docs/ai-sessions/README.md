@@ -32,4 +32,12 @@ from 01 each day in the order sessions were started.
 | [2026-09-27_03](2026-09-27/2026-09-27_03.md) | SkuNotFoundException step 3 | 2026-09-27 19:22 | 6 |
 | [2026-09-27_04](2026-09-27/2026-09-27_04.md) | InventoryService step 4 | 2026-09-27 19:49 | 4 |
 | [2026-09-27_05](2026-09-27/2026-09-27_05.md) | InventoryController step 5 | 2026-09-27 20:06 | 7 |
-| [2026-09-27_06](2026-09-27/2026-09-27_06.md) | InventoryExceptionHandler walkthrough | 2026-09-27 20:58 | 18 |
+| [2026-09-27_06](2026-09-27/2026-09-27_06.md) | InventoryExceptionHandler walkthrough | 2026-09-27 20:58 | 19 |
+| [2026-09-28_01](2026-09-28/2026-09-28_01.md) | POST /inventory/{skuId} endpoint | 2026-09-28 18:07 | 15 |
+| [2026-09-28_02](2026-09-28/2026-09-28_02.md) | InventoryRepository step 2 | 2026-09-28 20:55 | 12 |
+| [2026-09-28_03](2026-09-28/2026-09-28_03.md) | Nuuly inventory assessment step 4 | 2026-09-28 21:36 | 5 |
+| [2026-09-28_04](2026-09-28/2026-09-28_04.md) | InventoryQuantity Docker setup | 2026-09-28 21:53 | 4 |
+| [2026-09-28_05](2026-09-28/2026-09-28_05.md) | AddStockOverflowException | 2026-09-28 22:04 | 4 |
+| [2026-09-28_06](2026-09-28/2026-09-28_06.md) | InventoryService step 7 | 2026-09-28 22:16 | 7 |
+| [2026-09-28_07](2026-09-28/2026-09-28_07.md) | Inventory controller step 8 | 2026-09-28 22:36 | 23 |
+| [2026-09-29_01](2026-09-29/2026-09-29_01.md) | Walkthrough | 2026-09-29 15:45 | 31 |

@@ -25,7 +25,7 @@ class InventoryService(
     /**
      * Adds quantity to the SKU's stock, creating the SKU if it's new, and returns the new total.
      * @throws AddStockOverflowException if the add would push the stock past Int.MAX_VALUE.
-     * @throws IllegalArgumentException if quantity is less than 1.
+     * @throws IllegalArgumentException if quantity is less than 1 (a caller bug, so it surfaces as a 500).
      */
     fun receiveInventory(skuId : String, quantity: Int) : InventoryItem { 
         // Why: @Valid only protects HTTP requests; this also stops direct callers (0 would create an empty SKU).

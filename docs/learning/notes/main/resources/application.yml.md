@@ -1,6 +1,6 @@
 # application.yml
 
-> Source: [src/main/resources/application.yml](../../../../../src/main/resources/application.yml) · Last synced with code: 2026-09-28
+> Source: [src/main/resources/application.yml](../../../../../src/main/resources/application.yml) · Last synced with code: 2026-09-29
 
 ## Role
 
@@ -95,6 +95,17 @@ the literal reading; coercing it would accept requests the contract doesn't desc
 This is the first of two checks. Jackson decides "is it an `Int` at all?"; Bean Validation's
 `@Min(1)` on the DTO then decides "is it at least 1?", with its own message. `{"quantity": 0}`
 passes this block and fails `@Min`.
+
+**In Robert's words** (walkthrough, 2026-09-29): `accept-float-as-int: false` stops Jackson from
+truncating floats into integers (`12.5` into `12`). `allow-coercion-of-scalars: false` enforces strict
+type matching, so there's no automatic conversion between mismatched types, such as a string turning into
+a number. Both act while Jackson **reads** the body, not during validation: "validation" in Spring
+means Bean Validation (`@Valid` + `@Min`), which only runs after Jackson has built the object.
+
+**Without the validation starter** (walkthrough question): the app still compiles and starts, and
+`@Min` is silently ignored, because an annotation is only a label until something reads it. Then
+`{"quantity": 0}` reaches the service, where `require` throws `IllegalArgumentException`. No handler
+maps that, so the client gets a `500` instead of the contract's `400`.
 
 ### The application name
 

@@ -1,6 +1,6 @@
 # InventoryService.kt
 
-> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryService.kt](../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryService.kt) · Last synced with code: 2026-09-28
+> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryService.kt](../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryService.kt) · Last synced with code: 2026-09-29
 
 ## Role
 
@@ -165,7 +165,7 @@ reaching Spring, which is outside the compiler's reach.
 /**
  * Adds quantity to the SKU's stock, creating the SKU if it's new, and returns the new total.
  * @throws AddStockOverflowException if the add would push the stock past Int.MAX_VALUE.
- * @throws IllegalArgumentException if quantity is less than 1.
+ * @throws IllegalArgumentException if quantity is less than 1 (a caller bug, so it surfaces as a 500).
  */
 fun receiveInventory(skuId : String, quantity: Int) : InventoryItem {
     // Why: @Valid only protects HTTP requests; this also stops direct callers (0 would create an empty SKU).
@@ -182,6 +182,11 @@ worse). Robert first
 wrote it as an expression body; adding `require` meant converting it: `=` became `{`, the `require`
 went first, and the old expression got `return` in front of it. Forgetting that `return` is a
 compile error, because a block body with a return type must return on every path.
+
+**Watch the opposite rule in lambdas** (walkthrough, 2026-09-29): a function's `{ }` block needs
+`return`, but a lambda's `{ }` returns its last expression automatically. The repository's row mapper,
+`.query { rs, _ -> InventoryItem(...) }`, has no `return`, and adding one there would try to return
+from the enclosing function instead.
 
 **Kotlin (`require`):** a standard-library function. `require(condition) { message }` does nothing
 if the condition is true, and throws `IllegalArgumentException` with the message if it's false. The

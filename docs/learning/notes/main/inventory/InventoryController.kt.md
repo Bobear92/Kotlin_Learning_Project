@@ -1,6 +1,6 @@
 # InventoryController.kt
 
-> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryController.kt](../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryController.kt) · Last synced with code: 2026-09-28
+> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryController.kt](../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryController.kt) · Last synced with code: 2026-09-29
 
 ## Role
 
@@ -289,6 +289,12 @@ the object, so it has to be read with `.quantity`.
 **Why `200` and not `201 Created`:** a `POST` that creates something is often a `201`. The contract
 lists only `200`, for both "created" and "added to", and the tests check it. Returning
 `InventoryItem` (not a `ResponseEntity`) gives Spring's default `200`.
+
+**Where is the 200 enforced?** (walkthrough, 2026-09-29) Nowhere in production code: it's a
+default. Getting `201` would take `@ResponseStatus(HttpStatus.CREATED)` on the function, or a
+`ResponseEntity.status(HttpStatus.CREATED)` return. What pins the `200` is the test:
+`status { isOk() }` in `InventoryControllerTest`'s `POST inventory creates a new SKU`. Defaults
+don't show up in code, so a test has to pin them.
 
 **Naming:** `receiveInventory` matches the service function, the "one name through the layers" rule.
 It does *not* match the contract's `operationId: createInventory`: this endpoint creates **or**

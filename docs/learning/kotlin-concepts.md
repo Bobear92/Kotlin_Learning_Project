@@ -106,6 +106,7 @@ and `/walkthrough` add rows as new concepts come up.
 | Handling Spring's own exceptions | Advice handlers run before Spring's built-in resolver, so they can replace its `415`/empty `400`; never send Spring's `ex.message` to clients | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
 | `@ExceptionHandler` with no parameter | The annotation routes the exception; the parameter is only needed to read it | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
 | Three layers of checks | `@Valid` for clients (400), `require` for our own callers (500), DB `CHECK` as the backstop | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
+| Default response status | A plain return value is `200`; `201` needs `@ResponseStatus` or a `ResponseEntity`. Defaults are invisible in code, so tests pin them | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md#post-inventoryskuid) |
 
 ## Database and API design
 
