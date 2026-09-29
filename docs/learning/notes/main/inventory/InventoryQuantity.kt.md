@@ -11,8 +11,8 @@ one comes in. Jackson builds it from the request's JSON, and Bean Validation che
 `Int` inside it, so the [service](InventoryService.kt.md) and
 [repository](InventoryRepository.kt.md) never see this class.
 
-It will also be the request body for `POST /inventory/{skuId}/purchase`: the contract uses the same
-`InventoryQuantity` schema for both.
+It is also the request body for `POST /inventory/{skuId}/purchase`: the contract uses the same
+`InventoryQuantity` schema for both. (The class's KDoc still names only `POST /inventory/{skuId}`.)
 
 ## Walkthrough
 

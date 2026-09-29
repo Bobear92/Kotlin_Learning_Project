@@ -183,8 +183,9 @@ nullable return type `InventoryItem?` (explained in the repository's notes).
 
 **Why `null` and not an exception here:** "no row" is a normal answer to a database question,
 not an error. Turning it into "404 SKU not found" is a business decision, so it belongs in the
-service. That keeps the repository reusable: purchase will look SKUs up too, and it treats a
-missing one differently from low stock.
+service. That keeps the repository reusable. Purchase also has to tell a missing SKU apart from
+low stock, and `removeStock` reports which case happened (a [`PurchaseResult`](../../main/inventory/PurchaseResult.kt.md))
+instead of deciding what it means.
 
 ### Zero stock is found
 
@@ -368,7 +369,7 @@ fun `removeStock can sell the last unit and keeps the row at zero`() {
 for overflow), so a nullable type is enough. A purchase has three: purchased, SKU not found, and
 not enough stock. `null` can't say *which* failure happened, and the API needs a `404` for one and
 a `400` for the other. `PurchaseResult` is a sealed type with one case per outcome (Robert's
-[PurchaseResult.kt](../../main/inventory/PurchaseResult.kt.md) explains it once he's written it).
+[PurchaseResult.kt](../../main/inventory/PurchaseResult.kt.md) explains it).
 
 **Kotlin: comparing results with `assertEquals`.** `Purchased` wraps an `InventoryItem` and is a
 `data class`, so two `Purchased` values with equal items are equal. The test compares the whole

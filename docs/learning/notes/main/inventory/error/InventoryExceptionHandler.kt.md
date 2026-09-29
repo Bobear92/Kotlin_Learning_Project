@@ -1,11 +1,11 @@
 # InventoryExceptionHandler.kt
 
-> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/error/InventoryExceptionHandler.kt](../../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/error/InventoryExceptionHandler.kt) · Last synced with code: 2026-09-28
+> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/error/InventoryExceptionHandler.kt](../../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/error/InventoryExceptionHandler.kt) · Last synced with code: 2026-09-29
 
 ## Role
 
 Written by Robert. It turns exceptions into HTTP error responses. It sits *beside* the request flow,
-not in it. It handles five exceptions of two kinds: ours, thrown by the service, and Spring's own,
+not in it. It handles six exceptions of two kinds: ours, thrown by the service, and Spring's own,
 thrown while Spring reads the request, before the controller function runs. Without this class,
 ours would become `500`s and Spring's would get Spring's default `400` or `415`, never the
 contract's `text/plain` text.
@@ -14,12 +14,15 @@ contract's `text/plain` text.
 | --- | --- | --- |
 | [`SkuNotFoundException`](SkuNotFoundException.kt.md) | our service | `404` `SKU not found: <skuId>` |
 | [`AddStockOverflowException`](AddStockOverflowException.kt.md) | our service | `400` `Quantity would exceed the maximum stock` |
+| [`InsufficientInventoryException`](InsufficientInventoryException.kt.md) | our service | `400` `Insufficient inventory for <skuId>` |
 | `MethodArgumentNotValidException` | Spring (Bean Validation) | `400` with the `@Min` message |
 | `HttpMessageNotReadableException` | Spring (Jackson) | `400` `Invalid request body` |
 | `HttpMediaTypeNotSupportedException` | Spring (content negotiation) | `400` `Content-Type must be application/json` |
 
-Every body is `text/plain`. The purchase endpoint will add its own handlers here, so every error body
-the contract requires is built in one file.
+Every body is `text/plain`, and every error body the contract requires is built in this one file.
+The handlers are global, so the purchase endpoint reuses four of them: the `404` and the three
+request-reading `400`s. Its fifth, the insufficient-stock `400`, is new. Only the overflow handler is
+specific to receiving stock.
 
 ## Walkthrough
 
@@ -36,8 +39,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 ```
 
-**Kotlin:** `SkuNotFoundException` and `AddStockOverflowException` are in the same package
-(`inventory.error`), so they need no import. The three Spring exceptions do. Robert's first
+**Kotlin:** `SkuNotFoundException`, `AddStockOverflowException` and `InsufficientInventoryException`
+are in the same package (`inventory.error`), so they need no import. The three Spring exceptions do. Robert's first
 `MethodArgumentNotValidException` handler didn't compile for exactly this reason: his own exceptions
 had never needed an import, so the rule hadn't come up.
 `org.springframework.http` holds the HTTP building blocks (status codes, media types, responses);
@@ -90,13 +93,19 @@ constructor. `InventoryExceptionHandler{` with no space is legal.
 ### The `// Contract:` comment
 
 ```kotlin
-// Contract: paths./inventory/{skuId}.get - 404 with text/plain when SkuNotFoundException is thrown.
+// Contract: paths./inventory/{skuId}.get and paths./inventory/{skuId}/purchase.post - 404 with text/plain when SkuNotFoundException is thrown.
 ```
 
 **Contract:** `paths./inventory/{skuId}.get`, response `'404'`: content `text/plain`, schema
 `#/components/schemas/Error` (`type: string`). This comment is the other end of the one in the
 [controller](../InventoryController.kt.md#the-second--contract-comment): the controller says the `404`
 comes from `SkuNotFoundException`, and this file is where it's produced.
+
+**Why two paths:** `paths./inventory/{skuId}/purchase.post` also has a `'404'` "SKU not found", and
+the service throws the same `SkuNotFoundException` for it, so this one handler serves both endpoints.
+When purchase was added, Robert widened this comment and the three request-reading comments below
+to list every path that depends on them. A reader checking the purchase contract can then find its
+error responses by searching for the path.
 
 ### `handleSkuNotFound`
 
@@ -225,7 +234,7 @@ itself is a README "Contract gaps (POST)" decision.
 ### `handleValidationFailure`: the message from `@Min`
 
 ```kotlin
-// Contract: paths./inventory/{skuId}.post - a request body that fails validation is a 400 text/plain.
+// Contract: paths./inventory/{skuId}.post and paths./inventory/{skuId}/purchase.post - a request body that fails validation is a 400 text/plain.
 
 /** Returns a 400 text/plain response from the failing field's validation message.*/
 @ExceptionHandler(MethodArgumentNotValidException::class)
@@ -293,7 +302,7 @@ couldn't change behavior.
 ### `handleInvalidRequestBody`: a handler with no parameters
 
 ```kotlin
-// Contract: paths./inventory/{skuId}.post - when the request body is invalid we return a 400 text/plain.
+// Contract: paths./inventory/{skuId}.post and paths./inventory/{skuId}/purchase.post - when the request body is invalid we return a 400 text/plain.
 
 /** Returns a 400 text/plain response with the fixed text Invalid request body.*/
 @ExceptionHandler(HttpMessageNotReadableException::class)
@@ -327,7 +336,7 @@ A parameter is always `name: Type`, in Java too.
 ### `handleContentTypeMismatch`: 400 instead of Spring's 415
 
 ```kotlin
-// Contract: paths./inventory/{skuId}.post - when the content type is not application/json we return a 400 text/plain.
+// Contract: paths./inventory/{skuId}.post and paths./inventory/{skuId}/purchase.post - when the content type is not application/json we return a 400 text/plain.
 
 /** Returns a 400 text/plain response with the fixed text Content-Type must be application/json.*/
 @ExceptionHandler(HttpMediaTypeNotSupportedException::class)
@@ -355,6 +364,49 @@ endpoint with a `@RequestBody` gets the same `400` for a non-JSON request, which
 **Kotlin:** `():ResponseEntity<String>` with no spaces is legal. Robert's first version also copied
 the body from the handler above (`"Invalid request body"`); the test caught the wrong text.
 
+### `handleInsufficientInventory`: the exception comes in as a parameter
+
+```kotlin
+// Contract: paths./inventory/{skuId}/purchase.post - when there is insufficient inventory for a purchase call we return 400 text/plain.
+
+/** Returns a 400 text/plain response with the message from the exception: Insufficient inventory for <skuId> */
+@ExceptionHandler(InsufficientInventoryException::class)
+fun handleInsufficientInventory(ex: InsufficientInventoryException): ResponseEntity<String> =
+
+    ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .contentType(MediaType.TEXT_PLAIN)
+        .body(ex.message ?: "Insufficient Inventory")
+```
+
+**Spring:** the same shape as [`handleStockOverflow`](#handlestockoverflow-our-exception-our-message):
+our own exception, a `400`, and our own message as the body. The body is
+`Insufficient inventory for <skuId>`, written in
+[InsufficientInventoryException](InsufficientInventoryException.kt.md).
+
+**Spring (why `ex` must be declared):** this handler reads the exception, so it needs a parameter
+to receive it. [`handleInvalidRequestBody`](#handleinvalidrequestbody-a-handler-with-no-parameters)
+shows the opposite case. There the body is fixed text, so the parameter can be left out. Here the
+body includes the SKU, so the handler needs the exception object. Spring decides what to pass by
+the parameter's **type**: it sees `ex: InsufficientInventoryException` and passes in the exception
+that was thrown. The name `ex` is only a convention and has no special meaning. `e` or `error` would
+work just as well.
+
+Robert's versions show the two mistakes to avoid (2026-09-29):
+1. **A fixed body, `"Insufficient Inventory"`.** It compiles, but the controller test expects
+   `Insufficient inventory for widget`, and the fixed text loses the SKU.
+2. **`.body(ex.message ...)` with `()` still empty.** `ex` was never declared in this function, so
+   the compiler reports `Unresolved reference 'ex'`. `ex` in the other handlers is each one's
+   own parameter. A parameter name exists only inside the function that declares it, as in Java,
+   where `void handle(InsufficientInventoryException ex)` is the only way to get an `ex`.
+
+**Kotlin (the fallback):** as in the other handlers, `?:` is there only because `Throwable.message`
+is `String?`. The constructor always sets a message, so the fallback never runs. Its capitalization,
+`Inventory`, differs from the real message's `inventory`. That's harmless, because it's unreachable.
+
+**Contract:** `paths./inventory/{skuId}/purchase.post`, response `'400'`, `text/plain`. The
+contract's own description names this case: "Insufficient inventory or invalid request".
+`InventoryControllerTest` checks the status, the content type and the exact body.
+
 ## Check your understanding
 
 - Remove `@RestControllerAdvice` and run `GET /inventory/missing`. What status comes back, and why
@@ -367,3 +419,6 @@ the body from the handler above (`"Invalid request body"`); the test caught the 
 - Delete `handleContentTypeMismatch`. What does a `text/plain` POST get now, and which part of Spring produces it?
 - What does `ex.bindingResult.fieldError?.defaultMessage` evaluate to for `{"quantity": 0}`? When would the `?:` fallback be used?
 - Why is `ex.message` fine to send for `AddStockOverflowException` but not for `HttpMessageNotReadableException`?
+- Why does `handleInsufficientInventory` need a parameter when `handleInvalidRequestBody` doesn't? How does Spring know what to pass in?
+- Rename `ex` to `failure` in `handleInsufficientInventory` (in both places). Does anything change?
+- Which handlers answer a purchase request, and which handler can a purchase never reach?

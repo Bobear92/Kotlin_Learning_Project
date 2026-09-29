@@ -151,7 +151,8 @@ bug fail loudly.
 satisfy. Postgres rejects any `INSERT` or `UPDATE` that would break it, with SQLSTATE `23514`
 (`check_violation`). Spring translates that error into a `DataIntegrityViolationException`.
 
-The purchase `UPDATE` will already refuse to oversell through its `WHERE quantity >= ?`, so this
+The purchase `UPDATE` already refuses to oversell through its `WHERE quantity >= :requested_quantity`
+(see [`removeStock`](../../../inventory/InventoryRepository.kt.md#the-sql-a-data-modifying-cte)), so this
 constraint only matters if application code has a bug. That's the point of a second line of
 defense. The test `database rejects an update that would make quantity negative` in
 `InventoryRepositoryTest` deliberately runs an unguarded `UPDATE` to prove it.

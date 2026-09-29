@@ -97,8 +97,8 @@ anyone to catch it either. `RuntimeException` still matters for two reasons:
 **Why a custom exception and not `ResponseStatusException`:** Spring's
 `ResponseStatusException(HttpStatus.NOT_FOUND, ...)` would carry the status itself, which puts HTTP
 into the service. A custom exception keeps HTTP out of it: the service says *what* went wrong, and the handler decides how
-that looks over HTTP. The purchase endpoint will throw the same exception for a missing SKU, and
-the same handler will map it. (`ResponseStatusException` also doesn't give a `text/plain` body by
+that looks over HTTP. The purchase endpoint throws the same exception for a missing SKU, and
+the same handler maps it. (`ResponseStatusException` also doesn't give a `text/plain` body by
 default; see [the handler notes](InventoryExceptionHandler.kt.md#the-class-and-why-its-an-advice).)
 
 **Contract:** the message `SKU not found: <skuId>` is the `404` body, word for word. The contract

@@ -12,7 +12,10 @@ business decision in the codebase: a SKU the repository can't find is an error,
 [`SkuNotFoundException`](error/SkuNotFoundException.kt.md), which
 [`InventoryExceptionHandler`](error/InventoryExceptionHandler.kt.md) turns into a `404`. For
 `POST /inventory/{skuId}` it enforces the rule "at least 1 unit", and turns a refused add into
-[`AddStockOverflowException`](error/AddStockOverflowException.kt.md) (a `400`).
+[`AddStockOverflowException`](error/AddStockOverflowException.kt.md) (a `400`). For
+`POST /inventory/{skuId}/purchase` it applies the same rule, and translates each of the repository's
+three [`PurchaseResult`](PurchaseResult.kt.md)s: return the item, or throw `SkuNotFoundException`
+(`404`) or [`InsufficientInventoryException`](error/InsufficientInventoryException.kt.md) (`400`).
 [InventoryServiceTest](../../test/inventory/InventoryServiceTest.kt.md) calls it directly, the way
 a non-HTTP caller would.
 
@@ -23,13 +26,15 @@ a non-HTTP caller would.
 ```kotlin
 import com.robertwoolbright.inventory.inventory.error.AddStockOverflowException
 import com.robertwoolbright.inventory.inventory.error.SkuNotFoundException
+import com.robertwoolbright.inventory.inventory.error.InsufficientInventoryException
 import org.springframework.stereotype.Service
 ```
 
-**Kotlin:** `InventoryRepository` and `InventoryItem` are in the same package, so they need no
-import (see the [repository notes](InventoryRepository.kt.md#imports)). The two exceptions
+**Kotlin:** `InventoryRepository`, `InventoryItem` and `PurchaseResult` are in the same package, so they need no
+import (see the [repository notes](InventoryRepository.kt.md#imports)). The three exceptions
 live in the `error` subpackage, and a subpackage counts as a *different* package, so each needs a
-full import. Packages in Kotlin (and Java) aren't nested for visibility purposes: `inventory.error`
+full import. (The imports aren't in alphabetical order. Kotlin doesn't care, and the IDE's
+"Optimize Imports" would sort them.) Packages in Kotlin (and Java) aren't nested for visibility purposes: `inventory.error`
 is no closer to `inventory` than any other package is.
 
 ### A Spring bean that depends on the repository
@@ -89,7 +94,7 @@ none), and `InventoryControllerTest` checks that order strictly.
   "we couldn't look".
 
 Errors the *service* decides on are different: a missing SKU in `getInventory` (below) is a rule
-of the API, so the service throws on purpose. Purchase will add a second one, insufficient
+of the API, so the service throws on purpose. `purchaseInventory` adds a second one, insufficient
 stock (`400`).
 
 **Why a service at all, when it only delegates:** the controller could call the repository
@@ -228,7 +233,8 @@ input first.
 
 **Why in the service, not the repository:** "you can't receive fewer than 1 unit" is a business
 rule, and the service is where rules live. The repository's KDoc states the same thing as a
-precondition, because its SQL guard depends on it. Purchase will need the same check.
+precondition, because its SQL guard depends on it. [`purchaseInventory`](#purchaseinventory-one-branch-per-outcome)
+has the same check.
 
 **Why the message includes the value:** it only ever appears in a log or a stack trace when
 something has gone wrong. `was -5` tells whoever reads it what the caller actually passed.
@@ -251,6 +257,106 @@ layer, and lets the purchase flow or a test call it without building a request o
 the repository function is `addStock`, a data word. Robert first named it `addStock` too. Each
 layer names the action in its own vocabulary.
 
+### `purchaseInventory`: one branch per outcome
+
+```kotlin
+/**
+ * Removes quantity from a SKU's stock during a purchase. Returns the remaining InventoryItem on a success.
+ * @throws SkuNotFoundException when no sku is found.
+ * @throws InsufficientInventoryException if not enough quantity for the purchase.
+ * @throws IllegalArgumentException if quantity is less than 1 (a caller bug, so it surfaces as a 500).
+ */
+fun purchaseInventory(skuId: String, quantity: Int): InventoryItem {
+    // Why: @Valid only protects HTTP requests; this also stops direct callers (Can't have a 0 quantity in a purchase and a negative value would add stock.).
+    require(quantity >= 1) {"quantity must be at least 1, was $quantity"}
+    return when (val purchaseOutcome = inventoryRepository.removeStock(skuId,quantity)){
+            is PurchaseResult.Purchased -> purchaseOutcome.item
+            PurchaseResult.SkuNotFound -> throw SkuNotFoundException(skuId)
+            PurchaseResult.InsufficientStock -> throw InsufficientInventoryException(skuId)
+        }
+}
+```
+
+**What it does:** it checks the argument, asks the repository to buy, and turns the repository's
+[`PurchaseResult`](PurchaseResult.kt.md) into what the API needs. On success it returns the item;
+for each failure it throws the matching domain exception.
+
+**The `require`, again:** this is the same precondition as
+[`receiveInventory`](#receiveinventory-a-precondition-and-a-block-body), and it matters more here.
+With `-5`, the repository's `quantity >= -5` is always true and `quantity - (-5)` *adds* 5. The
+database `CHECK (quantity >= 0)` wouldn't catch it, because the stock goes up, not down. Only this
+line stops a purchase that adds stock. `InventoryServiceTest` checks `0` and `-5`.
+
+**Kotlin (`when` with a subject):** `when (x) { ... }` compares one value, the **subject**, against
+each branch in order. It's a much more capable version of Java's `switch`. The branches here use two
+kinds of check:
+
+| Branch | Kind | Means |
+| --- | --- | --- |
+| `is PurchaseResult.Purchased ->` | type check | "is the subject a `Purchased`?" (Java's `instanceof`) |
+| `PurchaseResult.SkuNotFound ->` | equality | "is the subject equal to the `SkuNotFound` object?" |
+
+The two `data object`s have exactly one instance each, so an equality check is enough.
+`is PurchaseResult.SkuNotFound` would also work. `Purchased` needs `is`, because every successful
+purchase creates a new `Purchased`, and there's no single instance to compare against.
+
+**Kotlin (`val` in the subject):** `when (val purchaseOutcome = ...)` calls the repository once,
+names the result, and limits that name to the `when`. Outside the braces, `purchaseOutcome` doesn't
+exist. The branches need the name, because `.item` is read from it.
+
+**Kotlin (smart cast, with a type):** `purchaseOutcome` has the declared type `PurchaseResult`, and
+that interface has no `item`. In the `is PurchaseResult.Purchased` branch, the compiler knows it's a
+`Purchased`, so `purchaseOutcome.item` compiles. That's a
+[smart cast](InventoryRepository.kt.md#choosing-the-outcome-a-when-without-a-subject), this time
+from an `is` check instead of a null check. Think of `Purchased` as a box and `item` as what's inside
+it: the service returns what's inside (`InventoryItem`), not the box. Java 16+ equivalent:
+
+```java
+if (outcome instanceof PurchaseResult.Purchased p) return p.item();
+```
+
+**Kotlin (exhaustive, with no `else`):** there are three branches and no `else`, and it compiles
+because `PurchaseResult` is [sealed](PurchaseResult.kt.md#a-sealed-interface). The compiler knows
+these are the only three cases, and it checks that each one is handled. That's better than adding an
+`else`. If a fourth case were added to `PurchaseResult`, this `when` would stop compiling until
+someone decided how the service handles it. With an `else`, the new case would silently fall into
+whatever the `else` did.
+
+**Kotlin (`when` is an expression):** the `when` produces a value, and `return` returns it. The
+branches have the types `InventoryItem`, `Nothing` and `Nothing`
+([`throw` is an expression of type `Nothing`](#getinventory-turning-no-row-into-an-error)), so the
+whole `when` has type `InventoryItem`, which matches the return type. The same `Nothing` rule is
+what lets `?: throw` produce a non-null result in `getInventory`.
+
+**Watch out: `return` and a line break.** `return` and the start of the `when` have to be on the
+same line. In Kotlin, a line break after a bare `return` ends the statement, so this:
+
+```kotlin
+return
+    when (val purchaseOutcome = ...) { ... }
+```
+
+is parsed as `return` with no value, followed by an unreachable `when`. The compiler rejects it,
+because the function has to return an `InventoryItem`. Robert ran into this while writing the
+function. Java doesn't have this trap, because semicolons, not line breaks, end statements.
+
+**Why the exceptions are thrown here:** the repository reports *what happened*, and the service
+decides *what that means*. This follows the same split as
+[`getInventory`](#getinventory-turning-no-row-into-an-error). `SkuNotFoundException` is the same
+exception `GET /inventory/{skuId}` uses, so the purchase endpoint's `404` comes from the same
+handler with the same body.
+
+**KDoc:** one `@throws` for each exception a caller can see, each saying *when*. "Returns the
+remaining InventoryItem" says what the `200` body contains: the stock after the purchase, not the
+amount bought. Robert changed it from "the new InventoryItem" in review, to match the controller's
+KDoc and the contract's "remaining inventory for the SKU".
+
+**Naming:** `purchaseInventory` is the business word. The repository's `removeStock` is the data
+word for the same action, the same pairing as `receiveInventory` and `addStock`.
+
+**Kotlin:** `removeStock(skuId,quantity)` with no space after the comma, and `){` with no space,
+are both legal.
+
 ## Check your understanding
 
 - Why is there no `try`/`catch` in `listInventory`? What does the client see if Postgres is down?
@@ -261,3 +367,7 @@ layer names the action in its own vocabulary.
 - Why can't `receiveInventory` stay an expression body once `require` is added?
 - A client posts `{"quantity": 0}`. Does the service's `require` run? What about a scheduled job calling `receiveInventory("x", 0)`?
 - Why is the `require` failure a `500` and not a `400`?
+- Why can `purchaseOutcome.item` be read in the first branch but not in the other two?
+- A teammate adds `else -> throw IllegalStateException()` to the `when`. It still compiles. What protection is lost?
+- What is the type of the whole `when`, and why isn't it `Any`?
+- `purchaseInventory("widget", -5)` is called without the `require`. What does the SQL do to `widget`'s stock, and would the database `CHECK` stop it?

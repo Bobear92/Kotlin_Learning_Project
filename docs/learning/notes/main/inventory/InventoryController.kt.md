@@ -5,9 +5,10 @@
 ## Role
 
 The web layer, written by Robert, and the top of the request flow: **controller** → service →
-repository. It turns HTTP requests for `GET /inventory`, `GET /inventory/{skuId}` and
-`POST /inventory/{skuId}` into calls to the [service](InventoryService.kt.md), and hands the result
-back to Spring to write as JSON. It holds no logic of its own. Not even the `404` or the `400`s:
+repository. It turns HTTP requests for `GET /inventory`, `GET /inventory/{skuId}`,
+`POST /inventory/{skuId}` and `POST /inventory/{skuId}/purchase` into calls to the
+[service](InventoryService.kt.md), and hands the result back to Spring to write as JSON. It holds
+no logic of its own. Not even the `404` or the `400`s:
 those come from [`InventoryExceptionHandler`](error/InventoryExceptionHandler.kt.md).
 [InventoryControllerTest](../../test/inventory/InventoryControllerTest.kt.md) checks it end to end
 through MockMvc.
@@ -172,7 +173,8 @@ fun getInventory(@PathVariable skuId: String): InventoryItem = inventoryService.
 **Spring (path templates):** `"/{skuId}"` is appended to the class's `/inventory`, giving
 `/inventory/{skuId}`. The braces mark a **path variable**: that segment matches any text up to the
 next `/`. So `/inventory/widget` matches with `skuId = "widget"`. `/inventory/widget/purchase` doesn't
-match this mapping (it has one segment too many); that path will get its own mapping later.
+match this mapping (it has one segment too many); it has its own mapping,
+[`purchaseInventory`](#post-inventoryskuidpurchase).
 `/inventory` alone still goes to `listInventory`, because it has no segment for `{skuId}`.
 
 **Spring (`@PathVariable`):** tells Spring to fill this parameter from the path variable. With no
@@ -309,11 +311,92 @@ version (`fun f(...) InventoryItem = ...` doesn't compile).
 after the change, so the response is the new total. `InventoryControllerTest` checks both a new
 SKU (`10`) and an existing one (`5 + 3 = 8`) with `JsonCompareMode.STRICT`.
 
+### The fourth `// Contract:` comment
+
+```kotlin
+// Contract: paths./inventory/{skuId}/purchase.post - 200 application/json with InventoryItem, 400 text/plain for a quantity below 1, an unreadable body, the wrong Content-Type, or insufficient amount of inventory, 404 text/plain for SKU not found.
+```
+
+**Contract:** `paths./inventory/{skuId}/purchase.post` (`operationId: purchaseItem`) lists three
+responses: `200` with an `InventoryItem` ("remaining inventory for the item"), `400` "Insufficient
+inventory or invalid request", and `404` "SKU not found", both as `text/plain`. The contract names
+insufficient inventory and a generic "invalid request". Which requests count as invalid are the same
+README "Contract gaps" decisions as for `POST /inventory/{skuId}`, because the request body is the
+same `InventoryQuantity`. Like the comments above it, this one lists outcomes that other files produce,
+so a reader knows which handlers to look for.
+
+### `POST /inventory/{skuId}/purchase`
+
+```kotlin
+/**
+ * Removes quantity from the SKU's stock on a purchase, and returns the remaining stock for POST /inventory/{skuId}/purchase.
+ */
+@PostMapping("/{skuId}/purchase")
+fun purchaseInventory(@PathVariable skuId: String, @Valid @RequestBody requestQuantity: InventoryQuantity): InventoryItem = inventoryService.purchaseInventory(skuId, requestQuantity.quantity)
+```
+
+**Spring (a path with a fixed segment):** `"/{skuId}/purchase"` has two segments. `{skuId}` matches
+any text, and `purchase` matches only that exact word. Added to the class's `/inventory`, it gives
+`/inventory/{skuId}/purchase`. Spring now has three mappings on paths below `/inventory/`:
+
+| Request | Mapping | Function |
+| --- | --- | --- |
+| `GET /inventory/widget` | `GET /{skuId}` | `getInventory` |
+| `POST /inventory/widget` | `POST /{skuId}` | `receiveInventory` |
+| `POST /inventory/widget/purchase` | `POST /{skuId}/purchase` | `purchaseInventory` |
+| `GET /inventory/widget/purchase` | the path matches, the method doesn't | Spring answers `405 Method Not Allowed` |
+
+The `405` comes from Spring's built-in resolver (our handler doesn't map it), and no test covers
+it: the contract defines no `GET` on this path. A path variable matches exactly one segment, so
+`/{skuId}` never matches `widget/purchase`. The
+reverse case is worth knowing: `POST /inventory/purchase` is a *receive* for a SKU called
+`purchase`, because `purchase` there sits in the `{skuId}` position. The contract doesn't forbid that
+id, and the routing handles it correctly.
+
+**Spring (the same body handling as receive):** `@Valid @RequestBody requestQuantity: InventoryQuantity`
+is the same parameter as in [`receiveInventory`](#post-inventoryskuid), because the contract uses the same
+`InventoryQuantity` schema for both endpoints. The same four steps run in the same order, and only the
+last one differs:
+
+| Step | Fails when | Handler's response |
+| --- | --- | --- |
+| 1. Find a converter for the `Content-Type` | not JSON | `400 Content-Type must be application/json` |
+| 2. Jackson reads the body | empty, malformed, wrong type, `null`, too big | `400 Invalid request body` |
+| 3. `@Valid` runs Bean Validation | `quantity < 1` | `400 quantity must be at least 1` |
+| 4. The function calls the service | no such SKU | `404 SKU not found: <skuId>` |
+| | not enough stock | `400 Insufficient inventory for <skuId>` |
+
+No new handler was needed for steps 1 to 3: the [exception handler](error/InventoryExceptionHandler.kt.md)
+is global, so the handlers written for receive also cover purchase. Step 4 reuses the `404` handler
+from `GET /inventory/{skuId}` and adds one new handler for insufficient stock.
+
+**Why an invalid body on a missing SKU is a `400` (Robert, 2026-09-29):** `POST /inventory/missing/purchase`
+with `{"quantity": 0}` has two problems. Steps 1 to 3 run before this function, and the database is
+only asked about the SKU in step 4, so the client gets the `400`. That's Spring's natural order, and
+it's also the cheaper one: a request with a bad body never reaches the database. The alternative
+(check the SKU first, and return `404`) would mean reading the path variable and querying the
+database before validating the body. `InventoryControllerTest` pins the order.
+
+**Kotlin:** an expression body that passes `requestQuantity.quantity` to the service, not the object,
+the same as [receive](#post-inventoryskuid). The service never depends on a web class.
+
+**Why `200`:** the contract lists `200` for a successful purchase, and returning `InventoryItem` gives
+Spring's default `200`. The body is the stock *after* the purchase (the repository's `RETURNING`
+row), which is why the KDoc says "returns the remaining stock". Robert changed "new" to "remaining"
+in review.
+
+**Naming:** `purchaseInventory` matches the service function (the "one name through the layers"
+rule), not the contract's `operationId: purchaseItem`. The same trade-off was made for
+`receiveInventory` and `createInventory`.
+
+**KDoc:** written as a multi-line `/** ... */` with the text on its own line. That's the same KDoc as
+the one-line form, formatted differently.
+
 ## Check your understanding
 
 - What would the response be if `@RestController` were replaced with `@Controller`?
 - A thousand requests hit `GET /inventory` at once. How many `InventoryController` objects exist? Why must it have no `var` fields?
-- Which handler answers `GET /inventory/widget`, and which answers `GET /inventory/widget/purchase` today?
+- Which function answers `GET /inventory/widget`? What does `GET /inventory/widget/purchase` get, and why not a `404`?
 - If the parameter were renamed to `id` but the mapping kept `{skuId}`, what would happen? How would you fix it without renaming?
 - Walk through `GET /inventory/missing`: which classes run, and in what order, until the `404` body is written?
 - What status does `POST /inventory` get today, and what about `GET /inventory/`?
@@ -321,3 +404,6 @@ SKU (`10`) and an existing one (`5 + 3 = 8`) with `JsonCompareMode.STRICT`.
 - A client posts `{"quantity": 0}` with `Content-Type: text/plain`. Which of the four steps fails first, and what does the client get?
 - Why must `skuId` match `{skuId}`, while `requestQuantity` can be named anything?
 - What would `POST /inventory/widget` with `{"quantity": 0}` return if `@Valid` were removed?
+- `POST /inventory/missing/purchase` with `{"quantity": 0}`: `400` or `404`? Which step decides?
+- What does `POST /inventory/purchase` with `{"quantity": 3}` do?
+- Which handlers in `InventoryExceptionHandler` can answer a purchase request, and which one never can?
