@@ -1,6 +1,6 @@
 # InventoryService.kt
 
-> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryService.kt](../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryService.kt) · Last synced with code: 2026-09-27
+> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryService.kt](../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryService.kt) · Last synced with code: 2026-09-28
 
 ## Role
 
@@ -10,20 +10,25 @@ The service layer, written by Robert. It sits in the middle of the request flow:
 passes the repository's list straight through. For `GET /inventory/{skuId}` it makes the first
 business decision in the codebase: a SKU the repository can't find is an error,
 [`SkuNotFoundException`](error/SkuNotFoundException.kt.md), which
-[`InventoryExceptionHandler`](error/InventoryExceptionHandler.kt.md) turns into a `404`.
+[`InventoryExceptionHandler`](error/InventoryExceptionHandler.kt.md) turns into a `404`. For
+`POST /inventory/{skuId}` it enforces the rule "at least 1 unit", and turns a refused add into
+[`AddStockOverflowException`](error/AddStockOverflowException.kt.md) (a `400`).
+[InventoryServiceTest](../../test/inventory/InventoryServiceTest.kt.md) calls it directly, the way
+a non-HTTP caller would.
 
 ## Walkthrough
 
 ### Imports
 
 ```kotlin
+import com.robertwoolbright.inventory.inventory.error.AddStockOverflowException
 import com.robertwoolbright.inventory.inventory.error.SkuNotFoundException
 import org.springframework.stereotype.Service
 ```
 
 **Kotlin:** `InventoryRepository` and `InventoryItem` are in the same package, so they need no
-import (see the [repository notes](InventoryRepository.kt.md#imports)). `SkuNotFoundException`
-lives in the `error` subpackage, and a subpackage counts as a *different* package, so it needs a
+import (see the [repository notes](InventoryRepository.kt.md#imports)). The two exceptions
+live in the `error` subpackage, and a subpackage counts as a *different* package, so each needs a
 full import. Packages in Kotlin (and Java) aren't nested for visibility purposes: `inventory.error`
 is no closer to `inventory` than any other package is.
 
@@ -154,6 +159,93 @@ reaching Spring, which is outside the compiler's reach.
 
 **Kotlin:** the spaces in `skuId : String` and `) : InventoryItem` are legal and change nothing.
 
+### `receiveInventory`: a precondition and a block body
+
+```kotlin
+/**
+ * Adds quantity to the SKU's stock, creating the SKU if it's new, and returns the new total.
+ * @throws AddStockOverflowException if the add would push the stock past Int.MAX_VALUE.
+ * @throws IllegalArgumentException if quantity is less than 1.
+ */
+fun receiveInventory(skuId : String, quantity: Int) : InventoryItem {
+    // Why: @Valid only protects HTTP requests; this also stops direct callers (0 would create an empty SKU).
+    require(quantity >= 1) {"quantity must be at least 1, was $quantity"}
+    return inventoryRepository.addStock(skuId, quantity) ?: throw AddStockOverflowException()
+}
+```
+
+**Kotlin (block body):** unlike the two functions above, this one has `{ }` and an explicit
+`return`. An [expression body](../../test/support/TestcontainersConfiguration.kt.md#the-container-bean)
+(`= ...`) holds one expression, and there are two steps here: check, then add. Two steps are
+clearer as a block body (squeezing them into one expression with `run { }` would compile, but reads
+worse). Robert first
+wrote it as an expression body; adding `require` meant converting it: `=` became `{`, the `require`
+went first, and the old expression got `return` in front of it. Forgetting that `return` is a
+compile error, because a block body with a return type must return on every path.
+
+**Kotlin (`require`):** a standard-library function. `require(condition) { message }` does nothing
+if the condition is true, and throws `IllegalArgumentException` with the message if it's false. The
+message is a [lambda](InventoryRepository.kt.md#mapping-each-row-the-lambda), so the string is only
+built when the check fails. `$quantity` inside it is a
+[string template](error/SkuNotFoundException.kt.md#the-whole-class-in-one-line). Java equivalent:
+
+```java
+if (!(quantity >= 1)) {
+    throw new IllegalArgumentException("quantity must be at least 1, was " + quantity);
+}
+```
+
+Its siblings: `check(condition)` throws `IllegalStateException` (for "this object is in the wrong
+state", not "you passed a bad argument"), and `requireNotNull(x)` returns `x` as non-null or throws.
+
+**Why a second check, when `@Valid` already rejects 0:** `@Valid` + `@Min` only run on an HTTP
+request body. The service is a public function that any Kotlin code can call directly: a test, a
+scheduled job, the purchase code. Before this line, a direct call behaved like this
+(`InventoryServiceTest` showed it on 2026-09-28):
+
+| Call | Without `require` | With `require` |
+| --- | --- | --- |
+| `receiveInventory("new-sku", 0)` | **succeeds**, creating an empty SKU (the `CHECK` allows 0) | `IllegalArgumentException` |
+| `receiveInventory("widget", 0)` | succeeds, adds nothing | `IllegalArgumentException` |
+| `receiveInventory("widget", -5)` | Postgres `integer out of range` (`MAX - (-5)` overflows), surfaced by Spring as `DataIntegrityViolationException` | `IllegalArgumentException` |
+
+Each check has a different audience:
+
+| Check | Catches | Client sees |
+| --- | --- | --- |
+| `@Min` + `@Valid` (controller) | a bad **client** request | `400 quantity must be at least 1` |
+| `require` (service) | a bad call from **our own code** | `500`: we have a bug |
+| `CHECK (quantity >= 0)` (database) | anything that got past both | `500` |
+
+That's why no handler maps `IllegalArgumentException` to `400`: if this ever fires, the mistake is
+ours, not the client's. In normal operation it never fires, because the controller rejects bad
+input first.
+
+**Why in the service, not the repository:** "you can't receive fewer than 1 unit" is a business
+rule, and the service is where rules live. The repository's KDoc states the same thing as a
+precondition, because its SQL guard depends on it. Purchase will need the same check.
+
+**Why the message includes the value:** it only ever appears in a log or a stack trace when
+something has gone wrong. `was -5` tells whoever reads it what the caller actually passed.
+
+**Kotlin (Elvis + `throw` again):** the `return` line is the same pattern as
+[`getInventory`](#getinventory-turning-no-row-into-an-error): `addStock` returns `InventoryItem?`,
+where `null` means "refused by the overflow guard", and `?: throw` turns it into a domain exception.
+
+**KDoc (`@throws` for each exception):** one tag per exception a caller can see, each saying *when*.
+Robert first put the `// Why:` reason inside the KDoc, after the first `@throws`. A tag's text runs
+until the next tag, so it read as part of the `AddStockOverflowException` description. KDoc is for
+callers (what it does, what it throws); the reason for the check is for maintainers, so it moved to
+the `// Why:` line.
+
+**Why `String` + `Int`, not `InventoryQuantity`:** the request body class is an HTTP detail (it
+exists because of the JSON shape). Taking plain values keeps the service independent of the web
+layer, and lets the purchase flow or a test call it without building a request object.
+
+**Naming:** `receiveInventory`, a business word from the brief ("receiving new stock by SKU"), while
+the repository function is `addStock`, a data word. Robert first named it `addStock` too. Each
+layer names the action in its own vocabulary.
+
 ## Check your understanding
 
 - Why is there no `try`/`catch` in `listInventory`? What does the client see if Postgres is down?
@@ -161,3 +253,6 @@ reaching Spring, which is outside the compiler's reach.
 - What would happen at startup if `@Service` were removed?
 - What is the type of `inventoryRepository.findBySkuId(skuId) ?: throw SkuNotFoundException(skuId)`, and why isn't it `InventoryItem?`?
 - If `getInventory` returned `InventoryItem?` and passed the `null` up, what would the controller have to do differently, and which test would catch it if it did nothing?
+- Why can't `receiveInventory` stay an expression body once `require` is added?
+- A client posts `{"quantity": 0}`. Does the service's `require` run? What about a scheduled job calling `receiveInventory("x", 0)`?
+- Why is the `require` failure a `500` and not a `400`?

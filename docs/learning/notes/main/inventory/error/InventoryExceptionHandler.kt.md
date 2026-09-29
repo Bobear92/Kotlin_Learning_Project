@@ -1,14 +1,25 @@
 # InventoryExceptionHandler.kt
 
-> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/error/InventoryExceptionHandler.kt](../../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/error/InventoryExceptionHandler.kt) · Last synced with code: 2026-09-27
+> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/error/InventoryExceptionHandler.kt](../../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/error/InventoryExceptionHandler.kt) · Last synced with code: 2026-09-28
 
 ## Role
 
 Written by Robert. It turns exceptions into HTTP error responses. It sits *beside* the request flow,
-not in it: controller → service → repository run as usual, and when one of them throws, Spring
-hands the exception to this class instead of failing with a `500`. Today it handles
-[`SkuNotFoundException`](SkuNotFoundException.kt.md) → `404` `text/plain`. The purchase endpoint will
-add handlers for its `400`s here, so every error body the contract requires is built in one file.
+not in it. It handles five exceptions of two kinds: ours, thrown by the service, and Spring's own,
+thrown while Spring reads the request, before the controller function runs. Without this class,
+ours would become `500`s and Spring's would get Spring's default `400` or `415`, never the
+contract's `text/plain` text.
+
+| Exception | From | Response |
+| --- | --- | --- |
+| [`SkuNotFoundException`](SkuNotFoundException.kt.md) | our service | `404` `SKU not found: <skuId>` |
+| [`AddStockOverflowException`](AddStockOverflowException.kt.md) | our service | `400` `Quantity would exceed the maximum stock` |
+| `MethodArgumentNotValidException` | Spring (Bean Validation) | `400` with the `@Min` message |
+| `HttpMessageNotReadableException` | Spring (Jackson) | `400` `Invalid request body` |
+| `HttpMediaTypeNotSupportedException` | Spring (content negotiation) | `400` `Content-Type must be application/json` |
+
+Every body is `text/plain`. The purchase endpoint will add its own handlers here, so every error body
+the contract requires is built in one file.
 
 ## Walkthrough
 
@@ -18,20 +29,27 @@ add handlers for its `400`s here, so every error body the contract requires is b
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
+import org.springframework.http.converter.HttpMessageNotReadableException
+import org.springframework.web.HttpMediaTypeNotSupportedException
+import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 ```
 
-**Kotlin:** `SkuNotFoundException` is in the same package (`inventory.error`), so it needs no import.
+**Kotlin:** `SkuNotFoundException` and `AddStockOverflowException` are in the same package
+(`inventory.error`), so they need no import. The three Spring exceptions do. Robert's first
+`MethodArgumentNotValidException` handler didn't compile for exactly this reason: his own exceptions
+had never needed an import, so the rule hadn't come up.
 `org.springframework.http` holds the HTTP building blocks (status codes, media types, responses);
-`web.bind.annotation` holds the Spring MVC annotations, the same package as `@GetMapping`.
+`web.bind.annotation` holds the Spring MVC annotations, the same package as `@GetMapping`. Note
+`web.bind` (the exception) vs `web.bind.annotation` (the annotations): two different packages.
 
 ### The class, and why it's an advice
 
 ```kotlin
 // Why: RestController advice so spring will catch and return specific responses we have built out for every controller rather than us building out multiple response entities for each controller. We rejected ResponseStatusException because its body is JSON, not text/plain.
 
-/** Where the various custom built exceptions are transformed to HTTP responses. */
+/** Where the various custom built exceptions and spring exceptions are transformed to HTTP responses. */
 @RestControllerAdvice
 class InventoryExceptionHandler{
 ```
@@ -169,13 +187,173 @@ non-ASCII ones. `MediaType("text", "plain", Charsets.UTF_8)` would state it; thi
 split across lines. The blank line after `=` is legal, and each line starting with `.` continues the
 chain. The space in `SkuNotFoundException )` changes nothing.
 
-**Naming:** `handle` + the exception's name is the usual Spring convention. When purchase adds an
-insufficient-stock handler to this class, the two function names will say which is which. Robert
-first reused the class name, `inventoryExceptionHandler`, and renamed it in review.
+**Naming:** `handle` + what went wrong is the usual Spring convention, so each function name says
+which case it covers. Robert first reused the class name, `inventoryExceptionHandler`, and renamed
+it in review.
 
 **Contract:** status `404`, `Content-Type: text/plain`, and a body that is a bare string: the `Error`
 schema is `type: string`, not an object. `InventoryControllerTest` checks all three, with
 `contentTypeCompatibleWith(TEXT_PLAIN)` so a later `;charset=UTF-8` would still pass.
+
+### `handleStockOverflow`: our exception, our message
+
+```kotlin
+// Contract: paths./inventory/{skuId}.post - 400 with text/plain when AddStockOverflowException is thrown.
+
+/** Returns a 400 text/plain response whose body is the exception's message.*/
+@ExceptionHandler(AddStockOverflowException::class)
+fun handleStockOverflow(ex: AddStockOverflowException): ResponseEntity<String> =
+
+    ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .contentType(MediaType.TEXT_PLAIN)
+        .body(ex.message ?: "Overflow Guard Triggered")
+```
+
+**Spring:** the same shape as `handleSkuNotFound`, with `HttpStatus.BAD_REQUEST` (`400`) instead of
+`NOT_FOUND`. Robert's first version kept `INTERNAL_SERVER_ERROR` from an earlier draft; the overflow
+test caught it (`Status expected:<400> but was:<500>`). Each `HttpStatus` constant is just a name
+for a number, and the client gets whatever is passed to `status(...)`.
+
+**Why `ex.message` is safe here:** we wrote this exception's message for the client
+(`"Quantity would exceed the maximum stock"`, in
+[AddStockOverflowException](AddStockOverflowException.kt.md)). As with `SkuNotFoundException`, the
+`?:` fallback never runs; it's only there because `Throwable.message` is typed `String?`.
+
+**Contract:** `paths./inventory/{skuId}.post`, response `'400'`, `text/plain`. The overflow case
+itself is a README "Contract gaps (POST)" decision.
+
+### `handleValidationFailure`: the message from `@Min`
+
+```kotlin
+// Contract: paths./inventory/{skuId}.post - a request body that fails validation is a 400 text/plain.
+
+/** Returns a 400 text/plain response from the failing field's validation message.*/
+@ExceptionHandler(MethodArgumentNotValidException::class)
+fun handleValidationFailure(ex: MethodArgumentNotValidException): ResponseEntity<String> =
+
+    ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .contentType(MediaType.TEXT_PLAIN)
+        .body(ex.bindingResult.fieldError?.defaultMessage ?: "Invalid request")
+```
+
+**Spring (handling Spring's own exceptions):** `MethodArgumentNotValidException` is what
+`@Valid @RequestBody` throws when Bean Validation fails. An advice doesn't care whose exception it
+handles. Because `@ExceptionHandler` methods in advice are tried (step 2 in the list above) before
+Spring's built-in mappings (step 4), this handler replaces Spring's default answer: a `400` without
+our text (Spring Boot's JSON error body in the running app, an empty body under MockMvc).
+
+**Why not `ex.message`:** for Spring's exceptions the message is written for developers, not
+clients. Robert's first version returned it, and the test showed what the client would have got:
+
+```text
+Validation failed for argument [1] in public com.robertwoolbright.inventory.inventory.InventoryItem
+com.robertwoolbright.inventory.inventory.InventoryController.receiveInventory(java.lang.String,...
+```
+
+That leaks the package, class and method names to anyone calling the API. The `?:` fallback didn't
+help either: `?:` only runs when the left side is `null`, and Spring's messages never are.
+
+**Kotlin (a chain of safe calls):** the message the client should see is the one in
+`@Min(message = ...)`. Spring stores it on the exception:
+
+| Expression | Type | What it is |
+| --- | --- | --- |
+| `ex.bindingResult` | `BindingResult` | every validation error for the body |
+| `.fieldError` | `FieldError?` | the first error on a field; `null` if none |
+| `?.defaultMessage` | `String?` | that error's message, here `"quantity must be at least 1"` |
+| `?: "Invalid request"` | `String` | the fallback if anything above was `null` |
+
+`?.` is the **safe-call operator**: `a?.b` is `a.b` if `a` isn't `null`, and `null` if it is, instead
+of a `NullPointerException`. One `?:` at the end covers a `null` from any step in the chain. Java
+equivalent:
+
+```java
+FieldError error = ex.getBindingResult().getFieldError();
+String message = (error != null && error.getDefaultMessage() != null)
+        ? error.getDefaultMessage() : "Invalid request";
+```
+
+Both `fieldError` and `defaultMessage` are Java getters marked `@Nullable` in Spring, so Kotlin
+types them `T?` and the compiler insists on `?.` (see [platform types](../../../build.gradle.kts.md#compiler-options)).
+
+**Why read it from the exception, not hardcode it:** Robert's second version returned the fixed text
+`"quantity must be at least 1"`. The tests passed, but the text then lived in two places, and the
+handler would say "quantity must be at least 1" for *any* validation failure, including rules added
+later. Reading `defaultMessage` keeps the annotation as the single source of the text.
+
+**Only the first error:** `fieldError` returns one error. The request body has one field today, so
+there's only ever one. With several fields, the client would see the first failure only.
+
+**Naming:** first `handleMalformedBody` (wrong: a malformed body is the next handler's job), then
+`handleMinQuantity`, renamed in review to `handleValidationFailure`, because the advice is global
+and will catch every Bean Validation failure on any `@Valid` body, not just `@Min`. The fallback and
+KDoc were made general at the same time. Spring never calls the method by name, so the rename
+couldn't change behavior.
+
+### `handleInvalidRequestBody`: a handler with no parameters
+
+```kotlin
+// Contract: paths./inventory/{skuId}.post - when the request body is invalid we return a 400 text/plain.
+
+/** Returns a 400 text/plain response with the fixed text Invalid request body.*/
+@ExceptionHandler(HttpMessageNotReadableException::class)
+fun handleInvalidRequestBody(): ResponseEntity<String> =
+
+    ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .contentType(MediaType.TEXT_PLAIN)
+        .body("Invalid request body")
+```
+
+**Spring:** `HttpMessageNotReadableException` covers every way reading the body can fail: empty,
+malformed JSON, `null`, an array, a missing or `null` `quantity`, a string, a decimal, or a number too
+big for `Int` (the nine cases in
+[InventoryControllerTest](../../../test/inventory/InventoryControllerTest.kt.md#every-unreadable-body-is-a-400)).
+They all get the same fixed text, the README "Contract gaps (POST)" decision.
+
+**Why a fixed string:** the exception's message is Jackson's, for example
+`JSON parse error: Cannot coerce String value ("5") to 'int' value (but might if coercion using 'CoercionConfig' was enabled)`.
+It names internal settings and differs for every case. There's nothing useful in it for the client
+that "Invalid request body" doesn't say.
+
+**Spring (no parameters):** once the body doesn't need the exception, the parameter can go. The
+exception type in `@ExceptionHandler(...)` is what routes the exception here; the parameter is only
+there when you want to *read* it. Spring looks at the parameter list, finds nothing to fill in, and
+calls the function with no arguments. With the parameter gone, the signature itself shows which
+handlers use the exception and which don't. Robert's first try removed only the name, leaving
+`(HttpMessageNotReadableException)`. Kotlin reads that as a parameter *named*
+`HttpMessageNotReadableException` with no type: "An explicit type is required on a value parameter".
+A parameter is always `name: Type`, in Java too.
+
+### `handleContentTypeMismatch`: 400 instead of Spring's 415
+
+```kotlin
+// Contract: paths./inventory/{skuId}.post - when the content type is not application/json we return a 400 text/plain.
+
+/** Returns a 400 text/plain response with the fixed text Content-Type must be application/json.*/
+@ExceptionHandler(HttpMediaTypeNotSupportedException::class)
+fun handleContentTypeMismatch():ResponseEntity<String> =
+
+    ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .contentType(MediaType.TEXT_PLAIN)
+        .body("Content-Type must be application/json")
+```
+
+**Spring:** `@RequestBody` throws `HttpMediaTypeNotSupportedException` when no message converter can
+read the request's `Content-Type` into `InventoryQuantity` (only Jackson can, and only for JSON).
+Spring's default answer is `415 Unsupported Media Type`: correct HTTP, but the contract lists only
+`200` and `400`. This handler overrides it.
+
+Robert's first version returned `HttpStatus.UNSUPPORTED_MEDIA_TYPE` here, so the handler *was*
+running but sent `415` on purpose. The status comes from the code, not from the exception.
+
+**Why:** a `415` is arguably the better HTTP answer, but a client written against the contract
+only expects `200` or `400`. Sticking to the contract was the README decision (2026-09-28).
+
+**Spring (global reach):** like every handler here, this one applies to every controller. Any future
+endpoint with a `@RequestBody` gets the same `400` for a non-JSON request, which is what we want.
+
+**Kotlin:** `():ResponseEntity<String>` with no spaces is legal. Robert's first version also copied
+the body from the handler above (`"Invalid request body"`); the test caught the wrong text.
 
 ## Check your understanding
 
@@ -185,3 +363,7 @@ schema is `type: string`, not an object. `InventoryControllerTest` checks all th
   handler answers a missing SKU, and which answers a database failure?
 - What would the client receive with `ResponseEntity.notFound().build()` instead of the chain?
 - Why does `ex.message` need `?:` even though the message can never be null here?
+- `handleInvalidRequestBody` returned `ex.message ?: "Invalid request body"`. What would the client see for `{"quantity": "5"}`, and why does the fallback never appear?
+- Delete `handleContentTypeMismatch`. What does a `text/plain` POST get now, and which part of Spring produces it?
+- What does `ex.bindingResult.fieldError?.defaultMessage` evaluate to for `{"quantity": 0}`? When would the `?:` fallback be used?
+- Why is `ex.message` fine to send for `AddStockOverflowException` but not for `HttpMessageNotReadableException`?

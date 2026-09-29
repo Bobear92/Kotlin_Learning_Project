@@ -54,6 +54,10 @@ and `/walkthrough` add rows as new concepts come up.
 | Ranges `..` and `until` | `1..n` includes `n`, `0 until n` excludes it; both work with `map`, `sum` | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
 | `runCatching` and `Result` | Runs a block and captures success or exception as a value, nothing thrown | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
 | Implicit lambda parameter `it` | A one-parameter lambda can leave the parameter out and use `it` | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
+| Safe-call operator `?.` | `a?.b` is `null` instead of an NPE when `a` is `null`; chains end in one `?:` fallback | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
+| `require` / `check` | `require(cond) { msg }` throws `IllegalArgumentException`; the message lambda runs only on failure | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
+| Block body vs expression body | `= expr` holds one expression; two steps (check, then act) read better as `{ }` with an explicit `return` | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
+| Class with no constructor parameters | `class E : RuntimeException("msg")`, created with `E()` | [AddStockOverflowException.kt](notes/main/inventory/error/AddStockOverflowException.kt.md) |
 
 ## Spring
 
@@ -96,6 +100,12 @@ and `/walkthrough` add rows as new concepts come up.
 | `@RepeatedTest` | Runs a test N times; used for intermittent concurrency bugs | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
 | Test transactions are per thread | A `@JdbcTest` rollback covers only the test thread; worker threads commit on their own connections | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
 | Start gate (`CountDownLatch`) | Hold N threads at one line, then release them together so they really overlap | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
+| `@PostMapping` + `@RequestBody` | Map a POST; Jackson reads the JSON body into a class through its primary constructor | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
+| `@Valid` + Bean Validation (`@Min`) | Constraints on a request class run only when the parameter has `@Valid`; failures throw `MethodArgumentNotValidException` | [InventoryQuantity.kt](notes/main/inventory/InventoryQuantity.kt.md) |
+| Request body failure order | Content-Type → JSON read → validation → the function; each failure is its own Spring exception | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
+| Handling Spring's own exceptions | Advice handlers run before Spring's built-in resolver, so they can replace its `415`/empty `400`; never send Spring's `ex.message` to clients | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
+| `@ExceptionHandler` with no parameter | The annotation routes the exception; the parameter is only needed to read it | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
+| Three layers of checks | `@Valid` for clients (400), `require` for our own callers (500), DB `CHECK` as the backstop | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
 
 ## Database and API design
 
@@ -105,3 +115,7 @@ and `/walkthrough` add rows as new concepts come up.
 | Natural vs surrogate key | `sku_id` as the primary key vs a generated `id` plus a unique `sku_id` | [V1__create_inventory.sql](notes/main/resources/db/migration/V1__create_inventory.sql.md) |
 | Constraints as a backstop | `PRIMARY KEY`, `NOT NULL`, `CHECK` protect data even when app code is wrong | [V1__create_inventory.sql](notes/main/resources/db/migration/V1__create_inventory.sql.md) |
 | Identifier case folding | Postgres lowercases unquoted names; use `snake_case` in SQL, `camelCase` in Kotlin | [V1__create_inventory.sql](notes/main/resources/db/migration/V1__create_inventory.sql.md) |
+| Upsert and `EXCLUDED` | `INSERT ... ON CONFLICT DO UPDATE`; `EXCLUDED` is the row the insert tried to add | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#the-upsert) |
+| `RETURNING` | A write returns the changed row in the same statement; no second `SELECT` | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#the-upsert) |
+| Lost update (find-then-write race) | Two requests read the same value and the second write erases the first; one atomic statement prevents it | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#addstock-the-signature-and-the-two-decisions) |
+| Overflow-safe guard | `current <= MAX - new` instead of `current + new <= MAX`, which itself overflows | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#the-overflow-guard) |

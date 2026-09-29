@@ -1,29 +1,36 @@
 # InventoryController.kt
 
-> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryController.kt](../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryController.kt) · Last synced with code: 2026-09-27
+> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryController.kt](../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryController.kt) · Last synced with code: 2026-09-28
 
 ## Role
 
 The web layer, written by Robert, and the top of the request flow: **controller** → service →
-repository. It turns HTTP requests for `GET /inventory` and `GET /inventory/{skuId}` into calls
-to the [service](InventoryService.kt.md), and hands the result back to Spring to write as JSON. It
-holds no logic of its own. Not even the `404`: that comes from
-[`InventoryExceptionHandler`](error/InventoryExceptionHandler.kt.md). [InventoryControllerTest](../../test/inventory/InventoryControllerTest.kt.md)
-checks it end to end through MockMvc.
+repository. It turns HTTP requests for `GET /inventory`, `GET /inventory/{skuId}` and
+`POST /inventory/{skuId}` into calls to the [service](InventoryService.kt.md), and hands the result
+back to Spring to write as JSON. It holds no logic of its own. Not even the `404` or the `400`s:
+those come from [`InventoryExceptionHandler`](error/InventoryExceptionHandler.kt.md).
+[InventoryControllerTest](../../test/inventory/InventoryControllerTest.kt.md) checks it end to end
+through MockMvc.
 
 ## Walkthrough
 
 ### Imports
 
 ```kotlin
+import jakarta.validation.Valid
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 ```
 
-**Spring:** all four annotations come from Spring MVC's `web.bind.annotation` package, which is
+**Spring:** the mapping annotations come from Spring MVC's `web.bind.annotation` package, which is
 on the classpath through `spring-boot-starter-webmvc` (see [build.gradle.kts](../../build.gradle.kts.md)).
+`@Valid` is different: it's from Bean Validation (`jakarta.validation`), through
+`spring-boot-starter-validation`, the same library as `@Min` in
+[InventoryQuantity](InventoryQuantity.kt.md#the-import).
 
 ### A REST controller mapped to `/inventory`
 
@@ -214,6 +221,88 @@ parameters) would also be allowed, as in Java.
 sold-out SKU is still a row, so it comes back as `200` with `"quantity": 0`, never `404`
 (`InventoryControllerTest` checks this).
 
+### The third `// Contract:` comment
+
+```kotlin
+// Contract: paths./inventory/{skuId}.post - 200 application/json with InventoryItem, 400 text/plain for a quantity below 1, an unreadable body, the wrong Content-Type, or an add that would overflow.
+```
+
+**Contract:** `paths./inventory/{skuId}.post` (`operationId: createInventory`) lists two
+responses: `200` with an `InventoryItem` as JSON ("the updated inventory state for the SKU"), and
+`400` "Invalid request" as `text/plain`. The contract doesn't say *which* requests are invalid; the
+four cases here are the README's "Contract gaps (POST)" decisions. Like the `404` comment above,
+it names cases this file never handles itself, so a reader knows to look in the exception handler.
+Robert's first version listed only the overflow case.
+
+### `POST /inventory/{skuId}`
+
+```kotlin
+/** Adds quantity to the SKU's stock, creating the SKU if it's new, and returns the new total for POST /inventory/{skuId}.*/
+@PostMapping("/{skuId}")
+fun receiveInventory(@PathVariable skuId: String, @Valid @RequestBody requestQuantity: InventoryQuantity): InventoryItem = inventoryService.receiveInventory(skuId, requestQuantity.quantity)
+```
+
+**Spring (`@PostMapping`):** the `POST` version of [`@GetMapping`](#get-inventory), with the same
+path template as `getInventory`. `GET` and `POST` to `/inventory/{skuId}` are two different
+mappings, and Spring picks one by the HTTP method. `@PathVariable` works exactly as in
+[`getInventory`](#get-inventoryskuid).
+
+**Spring (`@RequestBody`):** fills this parameter from the request **body**. Spring picks a message
+converter by the request's `Content-Type`: for `application/json` that's Jackson, which builds an
+`InventoryQuantity` through its primary constructor (see
+[InventoryQuantity](InventoryQuantity.kt.md#the-class)). It's the reverse of what
+[`@ResponseBody`](#a-rest-controller-mapped-to-inventory) does with the return value.
+`@RequestBody` is `required = true` by default, so a missing or `null` body is an error, matching
+the contract's `requestBody: required: true`.
+
+Unlike `@PathVariable`, the parameter **name** doesn't matter here: there's only one body, so
+`requestQuantity` could be called anything. The JSON field names are matched against
+`InventoryQuantity`'s properties, not against this parameter.
+
+**Spring (`@Valid`):** tells Spring to run Bean Validation on the object after Jackson builds it.
+That's what makes `@Min(1)` on `quantity` do anything. Without `@Valid`, `{"quantity": 0}` would
+reach the service. (The service's own [`require`](InventoryService.kt.md#receiveinventory-a-precondition-and-a-block-body)
+would then stop it, but as a `500`, not the contract's `400`.) The order of `@Valid` and
+`@RequestBody` doesn't matter.
+
+**Spring (what happens before this function runs):** the function body only runs if all of this
+succeeds. Each step that fails throws an exception, and the function is never called:
+
+| Step | Fails when | Exception | Handler's response |
+| --- | --- | --- | --- |
+| 1. Find a converter for the `Content-Type` | not JSON, e.g. `text/plain` | `HttpMediaTypeNotSupportedException` | `400 Content-Type must be application/json` |
+| 2. Jackson reads the body into `InventoryQuantity` | empty, malformed, wrong type, too big, `null` | `HttpMessageNotReadableException` | `400 Invalid request body` |
+| 3. `@Valid` runs Bean Validation | `quantity < 1` | `MethodArgumentNotValidException` | `400 quantity must be at least 1` |
+| 4. The function calls the service | the total would overflow | `AddStockOverflowException` | `400 Quantity would exceed the maximum stock` |
+
+Steps 1 to 3 are Spring's own exceptions. Without handlers, Spring's built-in resolver answers them
+(`415` for step 1, a `400` for steps 2 and 3, with Spring Boot's JSON error body in the running app
+and an empty body under MockMvc, never the contract's `text/plain` string); the
+[exception handler](error/InventoryExceptionHandler.kt.md) overrides that to match the contract.
+
+**Why the service gets `requestQuantity.quantity`, not the object:** the request body is an HTTP
+shape. The service takes plain `String` + `Int` and never depends on a web class (see the
+[service notes](InventoryService.kt.md#receiveinventory-a-precondition-and-a-block-body)). Robert's
+first version passed a bare `quantity`, which doesn't exist in this scope: the `Int` is inside
+the object, so it has to be read with `.quantity`.
+
+**Why `200` and not `201 Created`:** a `POST` that creates something is often a `201`. The contract
+lists only `200`, for both "created" and "added to", and the tests check it. Returning
+`InventoryItem` (not a `ResponseEntity`) gives Spring's default `200`.
+
+**Naming:** `receiveInventory` matches the service function, the "one name through the layers" rule.
+It does *not* match the contract's `operationId: createInventory`: this endpoint creates **or**
+adds, and "receive" (from the brief's "receiving new stock") covers both. Robert's first name,
+`postInventory`, described the HTTP verb rather than the action, and shared its name with the test
+helper, which made the tests confusing to read.
+
+**Kotlin:** an expression body again, with a missing `:` before the return type in Robert's first
+version (`fun f(...) InventoryItem = ...` doesn't compile).
+
+**Contract:** the body is an `InventoryItem`: `RETURNING` in the repository gives the row as it is
+after the change, so the response is the new total. `InventoryControllerTest` checks both a new
+SKU (`10`) and an existing one (`5 + 3 = 8`) with `JsonCompareMode.STRICT`.
+
 ## Check your understanding
 
 - What would the response be if `@RestController` were replaced with `@Controller`?
@@ -223,3 +312,6 @@ sold-out SKU is still a row, so it comes back as `200` with `"quantity": 0`, nev
 - Walk through `GET /inventory/missing`: which classes run, and in what order, until the `404` body is written?
 - What status does `POST /inventory` get today, and what about `GET /inventory/`?
 - Where in this code is JSON produced? Which part decides the field names?
+- A client posts `{"quantity": 0}` with `Content-Type: text/plain`. Which of the four steps fails first, and what does the client get?
+- Why must `skuId` match `{skuId}`, while `requestQuantity` can be named anything?
+- What would `POST /inventory/widget` with `{"quantity": 0}` return if `@Valid` were removed?

@@ -1,16 +1,19 @@
 # InventoryRepository.kt
 
-> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepository.kt](../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepository.kt) · Last synced with code: 2026-09-27
+> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepository.kt](../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepository.kt) · Last synced with code: 2026-09-28
 
 ## Role
 
 The data-access layer for inventory, written by Robert. It is the only class that talks to the
 `inventory` table (created by [V1__create_inventory.sql](../resources/db/migration/V1__create_inventory.sql.md)).
-Request flow for both reads: controller → service → **repository** → Postgres. `findAll` serves
-`GET /inventory` and `findBySkuId` serves `GET /inventory/{skuId}`. Each row comes back as an
-`InventoryItem`. The repository only reports what the table holds. It never decides what a missing
-row *means* for the API; that's the [service's](InventoryService.kt.md) job. [InventoryRepositoryTest](../../test/inventory/InventoryRepositoryTest.kt.md)
-checks it against a real Postgres.
+Request flow: controller → service → **repository** → Postgres. `findAll` serves
+`GET /inventory`, `findBySkuId` serves `GET /inventory/{skuId}`, and `addStock`, the first write,
+serves `POST /inventory/{skuId}`. Each row comes back as an `InventoryItem`. The repository only
+reports what the table holds or what a write did. It never decides what a missing row or a refused
+write *means* for the API; that's the [service's](InventoryService.kt.md) job.
+[InventoryRepositoryTest](../../test/inventory/InventoryRepositoryTest.kt.md) checks it against a
+real Postgres, and [InventoryConcurrencyTest](../../test/inventory/InventoryConcurrencyTest.kt.md)
+fires `addStock` from many threads at once.
 
 Robert's own summary, written while he worked on it:
 
@@ -36,7 +39,7 @@ Spring included, has to be imported.
 ### A Spring bean with constructor injection
 
 ```kotlin
-/** Reads inventory rows from Postgres, used by the service layer. */
+/** Reads and writes inventory rows from Postgres, used by the service layer. */
 @Repository
 class InventoryRepository(
     private val jdbcClient: JdbcClient,
@@ -314,6 +317,175 @@ is a normal answer here.
 thanks to the lambda), and `singleOrNull()` on a `List<T>` returns `T?`. That gives
 `InventoryItem?`, which matches the declared return type.
 
+### `addStock`: the signature and the two decisions
+
+```kotlin
+/**
+ * Adds quantity to a SKU's stock, creating the SKU if it doesn't exist yet, and returns the row with the new total.
+ * Returns null, changing nothing, only if the new total would go past Int.MAX_VALUE. Quantity must be at least 1.
+ */
+fun addStock(skuId: String, quantity: Int): InventoryItem? = jdbcClient.sql(
+// Why: one upsert instead of find-then-insert, so concurrent requests can't race each other.
+// Why: the overflow guard in the WHERE clause is written as current <= MAX - new, because current + new would itself overflow in Postgres.
+```
+
+**Kotlin:** the same shape as `findBySkuId`: an expression body returning a nullable
+[`InventoryItem?`](#findbyskuid-a-nullable-return-type). Here `null` means "refused", not "not
+found". The two `// Why:` comments sit *inside* the argument list of `sql(`, which is legal for the
+same reason as the [comment in the middle of a chain](#mapping-each-row-the-lambda): the compiler
+ignores comments wherever they are.
+
+**KDoc:** it states the precondition ("Quantity must be at least 1") because nothing in this function
+checks it. The [service's `require`](InventoryService.kt.md#receiveinventory-a-precondition-and-a-block-body)
+enforces it. The guard's arithmetic below only holds for a positive quantity.
+
+**Naming:** `addStock` is a data word: what happens to the row. The service calls the same action
+`receiveInventory`, a business word. Each layer names things in its own vocabulary (see the
+[service notes](InventoryService.kt.md#receiveinventory-a-precondition-and-a-block-body)).
+
+**Why one upsert, not find-then-insert:** the obvious version is two steps (hypothetical, not in
+the file):
+
+```kotlin
+val existing = findBySkuId(skuId)
+if (existing == null) insert(skuId, quantity) else update(skuId, existing.quantity + quantity)
+```
+
+With two requests for the same SKU at the same moment, both can run `findBySkuId` before either
+writes:
+
+| Time | Request A (+3) | Request B (+4) | Row |
+| --- | --- | --- | --- |
+| 1 | reads 5 | | 5 |
+| 2 | | reads 5 | 5 |
+| 3 | writes 5 + 3 = 8 | | 8 |
+| 4 | | writes 5 + 4 = 9 | **9** (A's 3 units are lost) |
+
+For a new SKU it's worse: both see "no row", both `INSERT`, and the second fails with a duplicate-key
+error. A single SQL statement can't be interleaved like this: Postgres runs it atomically and locks
+the row while it changes it. `InventoryConcurrencyTest` proves both cases.
+
+### The upsert
+
+```kotlin
+    """
+        INSERT INTO inventory (sku_id, quantity)
+            VALUES (:skuId, :quantity)
+                ON CONFLICT (sku_id)
+                    DO UPDATE SET quantity = inventory.quantity + EXCLUDED.quantity
+                        WHERE inventory.quantity <= :maxQuantity - EXCLUDED.quantity
+                            RETURNING sku_id, quantity
+            """
+)
+```
+
+**Kotlin (raw string):** `"""` is a raw string, explained in
+[InventoryControllerTest.kt](../../test/inventory/InventoryControllerTest.kt.md). It spans lines
+without `\n` or `+`. There's no `trimIndent()`: SQL ignores the extra spaces and line breaks. The
+deep indentation is Robert's layout and means nothing to Postgres.
+
+**SQL, clause by clause:**
+
+| Clause | What it does |
+| --- | --- |
+| `INSERT INTO inventory (sku_id, quantity) VALUES (:skuId, :quantity)` | try to add a new row |
+| `ON CONFLICT (sku_id)` | if a row with that `sku_id` already exists (the primary key would be violated)… |
+| `DO UPDATE SET quantity = inventory.quantity + EXCLUDED.quantity` | …update that row instead of failing |
+| `WHERE ...` | …but only if this condition holds (the overflow guard, below) |
+| `RETURNING sku_id, quantity` | send back the row as it is after the insert or update |
+
+This is called an **upsert** (update or insert). The endpoint's contract is exactly that: "If the SKU
+does not yet exist in inventory, it is created with the given quantity. If it already exists, the
+quantity is added to the current stock."
+
+**SQL (`inventory` vs `EXCLUDED`):** inside `DO UPDATE`, two rows are in play:
+- `inventory.quantity` is the row **already in the table** (the current stock).
+- `EXCLUDED.quantity` is the row the `INSERT` **tried to add** and couldn't, so it holds the
+  requested quantity. It's called "excluded" because the conflict kept it out.
+
+Like `it` in a Kotlin lambda, `EXCLUDED` is a name Postgres gives you; you don't declare it. For
+widget at 5 and a request of +3: `inventory.quantity` is 5, `EXCLUDED.quantity` is 3, and the new
+value is 8. (`EXCLUDED.quantity` has the same value as `:quantity` here, and reusing `:quantity`
+would also work with one `.param` call. `EXCLUDED` is the standard idiom, and it still means "the
+proposed row" if the `VALUES` ever change.)
+
+**SQL (`RETURNING`):** without it, an `INSERT` or `UPDATE` only reports how many rows changed.
+`RETURNING` makes the write return the changed row, like a `SELECT`, in the same statement. That's
+how the endpoint gets the new total without a second query, which could see another request's
+change. It must list columns (or `*`); Robert's first version had none.
+
+**Contract:** the `200` body is "the updated inventory state for the SKU", which is exactly the
+row `RETURNING` gives back.
+
+### The overflow guard
+
+```kotlin
+WHERE inventory.quantity <= :maxQuantity - EXCLUDED.quantity
+```
+
+**SQL (a `WHERE` on `DO UPDATE`):** if the condition is false, the update is skipped, the row stays
+as it was, and `RETURNING` returns **no row**. Nothing is written. That's what "refused" means here,
+and it happens inside the same atomic statement, so no other request can slip in between the check
+and the write.
+
+**Why this form (the algebra):** the rule is "the new total must fit in an `Int`":
+
+```text
+current + new <= MAX        ← the natural way to write it
+current       <= MAX - new  ← the same rule, with new moved to the right
+```
+
+Both say the same thing, but only the second is safe to *compute*. The column is a Postgres
+`integer` (4 bytes, like Kotlin's `Int`), so `current + new` itself overflows when the total is too
+big, and Postgres stops with `ERROR: integer out of range` before the comparison happens: a `500`
+instead of a clean refusal. `MAX - new` can't overflow, because `new` is at least 1.
+
+That last part is the precondition in the KDoc. With a **negative** quantity, `MAX - (-5)` is
+`MAX + 5`, which overflows. Robert asked whether `MAX - EXCLUDED` could overflow; this is the answer:
+only for `new < 0`, which the service's `require` rules out.
+
+**Alternative rejected:** cast to a bigger type, `inventory.quantity::bigint + EXCLUDED.quantity
+<= 2147483647`. It works, but the rearranged form needs no casts and reads as plain arithmetic.
+
+**Only the update is guarded:** a *new* SKU goes through `INSERT`, which has no `WHERE`. It doesn't
+need one: the quantity is a Kotlin `Int`, so it already fits.
+
+**Contract:** the README "Contract gaps (POST)" decision: an add that would overflow is a `400`
+(`Quantity would exceed the maximum stock`) with nothing changed. The "nothing changed" half is
+proven by `InventoryControllerTest`'s overflow test, which checks the quantity afterwards.
+
+### Binding the three parameters and reading the row
+
+```kotlin
+        .param("skuId", skuId)
+        .param("quantity", quantity)
+        .param("maxQuantity", Int.MAX_VALUE)
+        .query{rs, _ ->
+            InventoryItem(skuId = rs.getString("sku_id"), quantity = rs.getInt("quantity"))
+        }
+        .list().singleOrNull()
+```
+
+**Spring:** each `:name` in the SQL gets its value from a `.param` call, as in
+[`findBySkuId`](#binding-the-parameter-and-mapping-the-row). Every placeholder must be bound, or the
+query fails at run time. SQL strings are only checked when they run, which is why the repository
+tests matter: the compiler can't tell a typo in the SQL from a correct query.
+
+**Why `Int.MAX_VALUE` as a parameter:** the limit comes from the Kotlin type, so it's taken from the
+Kotlin constant instead of typing `2147483647` into the SQL: the limit visibly follows the Kotlin
+type instead of being a magic number.
+
+**Kotlin (`Int.MAX_VALUE`):** a constant on `Int`'s companion object (Kotlin's place for what Java
+calls static members), the same as Java's `Integer.MAX_VALUE`: 2,147,483,647.
+
+**Spring (`.query` on a write):** `RETURNING` makes the `INSERT` produce rows, so it's read with
+`.query { }` and `.list()` like a `SELECT`. The row mapper is the same lambda as in
+[`findAll`](#mapping-each-row-the-lambda).
+
+**Kotlin (`singleOrNull`):** as in [`findBySkuId`](#singleornull-zero-or-one-row): one row → the
+item, no rows → `null`. Here "no rows" means the overflow guard refused the update. Two rows can't
+happen: an upsert touches exactly one `sku_id`.
+
 ## Check your understanding
 
 - What does `@Repository` do that `@Import(InventoryRepository::class)` does in the test? Why does the running app need the annotation?
@@ -328,3 +500,7 @@ thanks to the lambda), and `singleOrNull()` on a `List<T>` returns `T?`. That gi
 - The service calls `findBySkuId("x' OR '1'='1")`. What SQL reaches Postgres, and what comes back?
 - If the primary key were dropped and two `widget` rows existed, what would `findBySkuId("widget")` return? What would the API answer?
 - Why can the service call `findBySkuId(skuId).quantity` only after handling `null`? Which line of the service does that?
+- `widget` has 5 units. Requests for +3 and +4 arrive at the same moment. What is the final quantity with `addStock`, and what could it be with find-then-insert?
+- In `DO UPDATE`, what are `inventory.quantity` and `EXCLUDED.quantity` for widget at 5 receiving +3?
+- `widget` is at `Int.MAX_VALUE - 1` and receives +2. What does the SQL return, and what does `addStock` return? What would happen with the guard written as `inventory.quantity + EXCLUDED.quantity <= :maxQuantity`?
+- Why doesn't a brand-new SKU need the overflow guard?

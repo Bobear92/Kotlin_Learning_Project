@@ -7,13 +7,37 @@
 Tests the service's own preconditions, the rules that must hold even when nobody goes through the
 controller. `@Valid` only protects HTTP requests; a Kotlin caller (a test, a job, the future
 purchase code) calls `InventoryService` directly and skips it. These tests call the service
-directly, the way such a caller would.
+directly, the way such a caller would. Claude wrote them during review (2026-09-28), before Robert
+added the service's `require`.
 
 ## Walkthrough
+
+### Imports
+
+```kotlin
+import com.robertwoolbright.inventory.support.TestcontainersConfiguration
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.jdbc.test.autoconfigure.JdbcTest
+import org.springframework.context.annotation.Import
+import org.springframework.jdbc.core.simple.JdbcClient
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
+```
+
+The same set as [InventoryRepositoryTest.kt](InventoryRepositoryTest.kt.md), plus JUnit's
+parameterized-test annotations (see [InventoryControllerTest.kt](InventoryControllerTest.kt.md)).
+There's no `@Test` import: every test here is a `@ParameterizedTest`.
 
 ### A JDBC slice with the service added
 
 ```kotlin
+/**
+ * [InventoryService] preconditions that hold even when the controller's `@Valid` check is bypassed
+ * (a direct Kotlin caller). Runs against a real Postgres; each test is rolled back.
+ */
 @JdbcTest
 @Import(TestcontainersConfiguration::class, InventoryRepository::class, InventoryService::class)
 class InventoryServiceTest @Autowired constructor(
@@ -27,24 +51,40 @@ class InventoryServiceTest @Autowired constructor(
 web layer, no component scan, every test rolled back. Because component scanning is off,
 `InventoryService` has to be listed in `@Import` too, next to the repository it depends on. Spring
 then builds the service with the repository injected, exactly as in the running app.
+`@Autowired constructor` is needed because JUnit, not Spring, creates the test class (see
+[InventoryRepositoryTest.kt](InventoryRepositoryTest.kt.md)).
 
-**Why a real database instead of a mock repository:** the tests check that *nothing was written*
-(`quantityOf` after the call). A mock can't prove that; a real table can.
+**Why a real database instead of a mock repository:** a mock could show that `addStock` was never
+called, but only the real table shows that the stored stock is unchanged, whatever path the code
+took. It also showed what really happened *before* the fix (the table below), which a mock would
+have hidden.
 
 ### The helpers
 
 ```kotlin
-private fun insert(skuId: String, quantity: Int) { ... }
-private fun quantityOf(skuId: String): Int? = ...
+private fun insert(skuId: String, quantity: Int) {
+    jdbcClient.sql("INSERT INTO inventory (sku_id, quantity) VALUES (?, ?)")
+        .params(skuId, quantity)
+        .update()
+}
+
+private fun quantityOf(skuId: String): Int? =
+    jdbcClient.sql("SELECT quantity FROM inventory WHERE sku_id = ?")
+        .param(skuId)
+        .query { rs, _ -> rs.getInt("quantity") }
+        .list()
+        .singleOrNull()
 ```
 
-The same two helpers as in [InventoryRepositoryTest.kt](InventoryRepositoryTest.kt.md): they set
-up and read rows with plain SQL, so the test doesn't use the code under test to check itself.
+The same two helpers as in [InventoryRepositoryTest.kt](InventoryRepositoryTest.kt.md), explained
+there, including the positional `?` placeholders filled by `.params(...)`. They set up and read rows
+with plain SQL, so the test doesn't use the code under test to check itself.
 
 ### Rejecting a quantity below 1
 
 ```kotlin
 // Why: a programming error, not a client error, so IllegalArgumentException (a 500), not a 400.
+/** A quantity below 1 is refused before the database is touched, and an existing SKU is unchanged. */
 @ParameterizedTest(name = "quantity {0}")
 @ValueSource(ints = [0, -5])
 fun `receiveInventory rejects a quantity below 1 for an existing SKU`(quantity: Int) {
@@ -64,7 +104,7 @@ fun `receiveInventory rejects a quantity below 1 for an existing SKU`(quantity: 
 three layers, each for a different audience:
 
 | Layer | Catches | Result |
-|---|---|---|
+| --- | --- | --- |
 | `@Valid` + `@Min` (controller) | a bad client request | 400 with a message |
 | `require` (service) | a bad call from our own code | 500: we have a bug |
 | `CHECK (quantity >= 0)` (database) | anything that got past both | 500 |
@@ -73,12 +113,16 @@ So there is deliberately no handler mapping `IllegalArgumentException` to 400.
 
 **Why both 0 and -5:** they failed in different ways before `require` existed. `0` *succeeded*:
 it created a new SKU with zero stock, or "added" nothing to an existing one, because the database
-`CHECK` allows 0. `-5` failed with a Postgres `DataIntegrityViolationException`, far from the
-real cause.
+`CHECK` allows 0. `-5` failed with a Postgres error (the overflow guard's `MAX - (-5)` for an
+existing SKU, the `CHECK` for a new one), which Spring surfaced as
+`DataIntegrityViolationException`, far from the real cause.
 
 ### A new SKU must not be created
 
 ```kotlin
+/** A quantity below 1 for an unknown SKU must not create it. */
+@ParameterizedTest(name = "quantity {0}")
+@ValueSource(ints = [0, -5])
 fun `receiveInventory rejects a quantity below 1 for a new SKU`(quantity: Int) {
     assertFailsWith<IllegalArgumentException> { inventoryService.receiveInventory("new-sku", quantity) }
     assertNull(quantityOf("new-sku"))
