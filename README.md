@@ -13,8 +13,8 @@ is in [docs/Nuuly_Assessment_Instructions.txt](docs/Nuuly_Assessment_Instruction
 | Method | Path | Behavior | Responses | Status |
 | --- | --- | --- | --- | --- |
 | `GET` | `/inventory` | List every SKU and its quantity (`[]` when empty) | `200` JSON array | Implemented; tests green; reviewed and walked through |
-| `GET` | `/inventory/{skuId}` | Current quantity for one SKU (`404` body: `SKU not found: <skuId>`) | `200` JSON, `404` text | Implemented; tests green; walkthrough pending |
-| `POST` | `/inventory/{skuId}` | Add stock; creates the SKU if it is new | `200` JSON, `400` text | Not started |
+| `GET` | `/inventory/{skuId}` | Current quantity for one SKU (`404` body: `SKU not found: <skuId>`) | `200` JSON, `404` text | Implemented; tests green; reviewed and walked through |
+| `POST` | `/inventory/{skuId}` | Add stock; creates the SKU if it is new (one atomic upsert) | `200` JSON, `400` text | Implemented; tests green; reviewed; walkthrough pending |
 | `POST` | `/inventory/{skuId}/purchase` | Deduct stock, only if enough is on hand | `200` JSON, `400` / `404` text | Not started |
 
 Request bodies are `{"quantity": <integer ≥ 1>}`. Success bodies are
@@ -60,9 +60,9 @@ Each decision and its reasoning is recorded here once it is made.
 | Schema migrations | **Flyway**: versioned plain-SQL files, run automatically at startup and in tests. Considered Liquibase (XML/YAML changesets, more ceremony) and `schema.sql` (no versioning). | Decided 2026-09-23 |
 | List order and contents | **Ordered by `sku_id`** (the contract specifies no order; a fixed one keeps responses and tests stable). **Zero-stock SKUs are listed**: a sold-out SKU still exists, and `GET /inventory/{skuId}` returns it with quantity `0`. | Decided 2026-09-24 |
 | Column types | `sku_id TEXT` (exact, case-sensitive match for now), `quantity INTEGER` (Kotlin `Int`). Considered `BIGINT`/`Long`; overflow will be handled when adding stock instead. | Decided 2026-09-24 |
-| Error handling | A domain exception per error (`SkuNotFoundException`), thrown by the service and mapped to a `text/plain` response by one `@RestControllerAdvice`. Exceptions and the handler live in the `inventory.error` subpackage. 404 body: `SKU not found: <skuId>`, no trailing period. Considered a `ResponseEntity` built in each controller (repeats per endpoint), `ResponseStatusException` (JSON body, the contract needs `text/plain`), and a flat or top-level `error` package. | Decided 2026-09-27 |
+| Error handling | A domain exception per error (`SkuNotFoundException`, `AddStockOverflowException`), thrown by the service and mapped to a `text/plain` response by one `@RestControllerAdvice`. The same advice maps Spring's request-reading exceptions for `POST` (`MethodArgumentNotValidException`, `HttpMessageNotReadableException`, `HttpMediaTypeNotSupportedException`) to `400`s, and never sends Spring's own exception messages to the client (2026-09-28). Exceptions and the handler live in the `inventory.error` subpackage. 404 body: `SKU not found: <skuId>`, no trailing period. Considered a `ResponseEntity` built in each controller (repeats per endpoint), `ResponseStatusException` (JSON body, the contract needs `text/plain`), and a flat or top-level `error` package. | Decided 2026-09-27 |
 | Demo seed data | Tests insert their own rows. Whether a running app should start with sample data (e.g. a dev-only Flyway location) is decided once `POST /inventory/{skuId}` exists. | Open |
-| Contract gaps | Malformed or missing JSON body, `quantity` of wrong type, SKU id format/case sensitivity (currently exact, case-sensitive: `W` and `w` are two SKUs; options to decide with `POST`: keep exact match, normalize case in the app, a case-insensitive column, or reject non-canonical SKUs), integer overflow on add | Open |
+| Contract gaps (POST) | Settled for `POST /inventory/{skuId}` by Robert on 2026-09-28. **SKU ids: exact, case-sensitive match** (`W` and `w` are two SKUs; the contract sets no format, and normalizing would silently change the id a client sent). **Strict JSON:** malformed, empty or `null` bodies, a missing or `null` `quantity`, a string (`"5"`), a decimal (`1.5`) or a number too big for `Int` are all `400` `Invalid request body` (Jackson's lenient defaults would coerce `"5"` and truncate `1.5`). `quantity < 1`: `400` `quantity must be at least 1`, checked with Bean Validation in the controller layer (considered a manual check in the service). The service also has `require(quantity >= 1)` for callers that bypass HTTP; hitting it is our bug, so it's a `500`, not a `400` (added in review, 2026-09-28). **Wrong `Content-Type`:** `400` `Content-Type must be application/json` instead of Spring's `415`, which the contract doesn't list. **Overflow:** a total past `Int.MAX_VALUE` is `400` `Quantity would exceed the maximum stock`, refused atomically inside the upsert's SQL (considered leaving Postgres's `integer out of range` as a `500`). All `400` bodies are `text/plain`. | Decided 2026-09-28 |
 
 ### Decision record: PostgreSQL and atomic SQL
 
@@ -150,7 +150,7 @@ src/main/
     db/migration/             Flyway SQL migrations (V1__..., V2__...)
     openapi/inventory.yaml    The OpenAPI contract (source of truth)
 src/test/kotlin/com/robertwoolbright/inventory/
-  inventory/                  Feature tests: repository, controller, concurrency races
+  inventory/                  Feature tests: repository, service, controller, concurrency races
   support/                    Shared test setup (the Testcontainers Postgres)
 .claude/                 Claude Code configuration (hooks, agents, skills) — see below
 CLAUDE.md                Project memory and coding standards for Claude Code

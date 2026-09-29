@@ -6,7 +6,7 @@ import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.stereotype.Repository
 
 
-/** Reads inventory rows from Postgres, used by the service layer. */
+/** Reads and writes inventory rows from Postgres, used by the service layer. */
 @Repository
 class InventoryRepository(
     private val jdbcClient: JdbcClient,
@@ -31,5 +31,30 @@ class InventoryRepository(
                 InventoryItem(skuId = rs.getString("sku_id"), quantity = rs.getInt("quantity"))
             }
     // Why: The list singleOrNull below, we did this over the Java optional so we can stay within kotlin. We wont have more than one entry in the list because sku_id is the primary key so it is unique.
+            .list().singleOrNull()
+            
+    
+    /**
+     * Adds quantity to a SKU's stock, creating the SKU if it doesn't exist yet, and returns the row with the new total.
+     * Returns null, changing nothing, only if the new total would go past Int.MAX_VALUE. Quantity must be at least 1.
+     */
+    fun addStock(skuId: String, quantity: Int): InventoryItem? = jdbcClient.sql(
+    // Why: one upsert instead of find-then-insert, so concurrent requests can't race each other.
+    // Why: the overflow guard in the WHERE clause is written as current <= MAX - new, because current + new would itself overflow in Postgres.
+        """ 
+            INSERT INTO inventory (sku_id, quantity)  
+                VALUES (:skuId, :quantity) 
+                    ON CONFLICT (sku_id) 
+                        DO UPDATE SET quantity = inventory.quantity + EXCLUDED.quantity  
+                            WHERE inventory.quantity <= :maxQuantity - EXCLUDED.quantity 
+                                RETURNING sku_id, quantity
+                """
+    )
+            .param("skuId", skuId)
+            .param("quantity", quantity)
+            .param("maxQuantity", Int.MAX_VALUE)
+            .query{rs, _ ->
+                InventoryItem(skuId = rs.getString("sku_id"), quantity = rs.getInt("quantity"))
+            }
             .list().singleOrNull()
 }

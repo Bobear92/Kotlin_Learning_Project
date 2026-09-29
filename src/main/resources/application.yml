@@ -2,5 +2,12 @@
 # Why: no spring.datasource.* here. Docker Compose support (bootRun) and Testcontainers'
 # @ServiceConnection (tests) supply the connection details, so no credentials live in config.
 spring:
+  # Why: Jackson's lenient defaults silently turn "5" into 5 and 1.5 into 1. Stock counts
+  # must be exact, so those bodies are a 400 instead.
+  jackson:
+    deserialization:
+      accept-float-as-int: false
+    mapper:
+      allow-coercion-of-scalars: false
   application:
     name: inventory

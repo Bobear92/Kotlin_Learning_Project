@@ -48,6 +48,16 @@ and `/walkthrough` add rows as new concepts come up.
 | No ternary; `if` is an expression | Java's `c ? a : b` is `if (c) a else b`; `?:` (Elvis) only tests for `null` | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
 | String templates | `"SKU not found: $skuId"`, and `${expr}` for anything longer than a name | [SkuNotFoundException.kt](notes/main/inventory/error/SkuNotFoundException.kt.md) |
 | Nullable values from Java | `Throwable.message` is `String?` because `getMessage()` may return null | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
+| Default arguments | `fun f(x: T = default)`: callers may leave the argument out; replaces Java overloads | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
+| Array literals in annotations | `@ValueSource(ints = [0, -5])`; Java writes `{0, -5}` | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
+| Generic functions and function types | `fun <T> race(action: (Int) -> T)`: a type parameter plus a parameter that holds a function | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
+| Ranges `..` and `until` | `1..n` includes `n`, `0 until n` excludes it; both work with `map`, `sum` | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
+| `runCatching` and `Result` | Runs a block and captures success or exception as a value, nothing thrown | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
+| Implicit lambda parameter `it` | A one-parameter lambda can leave the parameter out and use `it` | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
+| Safe-call operator `?.` | `a?.b` is `null` instead of an NPE when `a` is `null`; chains end in one `?:` fallback | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
+| `require` / `check` | `require(cond) { msg }` throws `IllegalArgumentException`; the message lambda runs only on failure | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
+| Block body vs expression body | `= expr` holds one expression; two steps (check, then act) read better as `{ }` with an explicit `return` | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
+| Class with no constructor parameters | `class E : RuntimeException("msg")`, created with `E()` | [AddStockOverflowException.kt](notes/main/inventory/error/AddStockOverflowException.kt.md) |
 
 ## Spring
 
@@ -57,6 +67,9 @@ and `/walkthrough` add rows as new concepts come up.
 | Starters and the Boot BOM | Starters bundle dependencies; the dependency-management plugin supplies versions | [build.gradle.kts](notes/build.gradle.kts.md) |
 | Docker Compose support | `bootRun` starts compose.yaml and wires the DataSource | [compose.yaml](notes/compose.yaml.md) |
 | Property source precedence | Command line > environment variables > application.yml > defaults; relaxed binding maps `SPRING_DATASOURCE_URL` to `spring.datasource.url` | [application.yml](notes/main/resources/application.yml.md) |
+| YAML map properties | `spring.jackson.deserialization:` binds its children into a `Map<Feature, Boolean>`; each indent level is one segment of the dotted name | [application.yml](notes/main/resources/application.yml.md#strict-json-the-jackson-block) |
+| Strict JSON (Jackson 3) | `accept-float-as-int` / `allow-coercion-of-scalars` off, so `1.5` and `"5"` are 400s instead of guesses; a non-null `Int` rejects `{}` and `null` | [application.yml](notes/main/resources/application.yml.md#strict-json-the-jackson-block) |
+| Bean Validation starter | `spring-boot-starter-validation`: `jakarta.validation` annotations + Hibernate Validator, run on `@Valid @RequestBody` | [build.gradle.kts](notes/build.gradle.kts.md) |
 | Connection details | Compose / Testcontainers supply the DB connection, overriding `spring.datasource.*` | [application.yml](notes/main/resources/application.yml.md) |
 | Test context caching | Identical test configurations share one context (and container) until the run ends | [TestcontainersConfiguration.kt](notes/test/support/TestcontainersConfiguration.kt.md) |
 | `@TestConfiguration` + `@Import` | Test-only beans that component scanning skips | [TestcontainersConfiguration.kt](notes/test/support/TestcontainersConfiguration.kt.md) |
@@ -83,6 +96,17 @@ and `/walkthrough` add rows as new concepts come up.
 | Exception resolver chain | Spring catches every controller exception: `@ExceptionHandler` (controller, then advice) → `@ResponseStatus` → built-in mappings → `500` | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
 | When mistakes surface | Compile time (types), startup (missing beans), first request (strings: paths, SQL, missing advice); only request-level tests catch the last | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
 | `ResponseEntity` builder | `status(...).contentType(...).body(...)` sets status, headers and body; `notFound()` has no body | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
+| `@ParameterizedTest` + `@ValueSource` | One test method run once per supplied value, each reported separately | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
+| `@RepeatedTest` | Runs a test N times; used for intermittent concurrency bugs | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
+| Test transactions are per thread | A `@JdbcTest` rollback covers only the test thread; worker threads commit on their own connections | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
+| Start gate (`CountDownLatch`) | Hold N threads at one line, then release them together so they really overlap | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
+| `@PostMapping` + `@RequestBody` | Map a POST; Jackson reads the JSON body into a class through its primary constructor | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
+| `@Valid` + Bean Validation (`@Min`) | Constraints on a request class run only when the parameter has `@Valid`; failures throw `MethodArgumentNotValidException` | [InventoryQuantity.kt](notes/main/inventory/InventoryQuantity.kt.md) |
+| Request body failure order | Content-Type → JSON read → validation → the function; each failure is its own Spring exception | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
+| Handling Spring's own exceptions | Advice handlers run before Spring's built-in resolver, so they can replace its `415`/empty `400`; never send Spring's `ex.message` to clients | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
+| `@ExceptionHandler` with no parameter | The annotation routes the exception; the parameter is only needed to read it | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
+| Three layers of checks | `@Valid` for clients (400), `require` for our own callers (500), DB `CHECK` as the backstop | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
+| Default response status | A plain return value is `200`; `201` needs `@ResponseStatus` or a `ResponseEntity`. Defaults are invisible in code, so tests pin them | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md#post-inventoryskuid) |
 
 ## Database and API design
 
@@ -92,3 +116,7 @@ and `/walkthrough` add rows as new concepts come up.
 | Natural vs surrogate key | `sku_id` as the primary key vs a generated `id` plus a unique `sku_id` | [V1__create_inventory.sql](notes/main/resources/db/migration/V1__create_inventory.sql.md) |
 | Constraints as a backstop | `PRIMARY KEY`, `NOT NULL`, `CHECK` protect data even when app code is wrong | [V1__create_inventory.sql](notes/main/resources/db/migration/V1__create_inventory.sql.md) |
 | Identifier case folding | Postgres lowercases unquoted names; use `snake_case` in SQL, `camelCase` in Kotlin | [V1__create_inventory.sql](notes/main/resources/db/migration/V1__create_inventory.sql.md) |
+| Upsert and `EXCLUDED` | `INSERT ... ON CONFLICT DO UPDATE`; `EXCLUDED` is the row the insert tried to add | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#the-upsert) |
+| `RETURNING` | A write returns the changed row in the same statement; no second `SELECT` | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#the-upsert) |
+| Lost update (find-then-write race) | Two requests read the same value and the second write erases the first; one atomic statement prevents it | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#addstock-the-signature-and-the-two-decisions) |
+| Overflow-safe guard | `current <= MAX - new` instead of `current + new <= MAX`, which itself overflows | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#the-overflow-guard) |
