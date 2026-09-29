@@ -41,4 +41,6 @@ from 01 each day in the order sessions were started.
 | [2026-09-28_06](2026-09-28/2026-09-28_06.md) | InventoryService step 7 | 2026-09-28 22:16 | 7 |
 | [2026-09-28_07](2026-09-28/2026-09-28_07.md) | Inventory controller step 8 | 2026-09-28 22:36 | 23 |
 | [2026-09-29_01](2026-09-29/2026-09-29_01.md) | Walkthrough | 2026-09-29 15:45 | 34 |
-| [2026-09-29_02](2026-09-29/2026-09-29_02.md) | InventoryExceptionHandler last feature | 2026-09-29 19:00 | 31 |
+| [2026-09-29_02](2026-09-29/2026-09-29_02.md) | InventoryExceptionHandler last feature | 2026-09-29 19:00 | 32 |
+| [2026-09-29_03](2026-09-29/2026-09-29_03.md) | InventoryRepository step 3 | 2026-09-29 21:03 | 11 |
+| [2026-09-29_04](2026-09-29/2026-09-29_04.md) | InventoryService step 5 | 2026-09-29 21:55 | 2 |
