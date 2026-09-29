@@ -57,4 +57,37 @@ class InventoryRepository(
                 InventoryItem(skuId = rs.getString("sku_id"), quantity = rs.getInt("quantity"))
             }
             .list().singleOrNull()
+            
+            
+    /** 
+     * Removes the requested quantity because of a purchase from the SKU's stock.
+     * Quantity must be at least 1.
+     * Returns [PurchaseResult.Purchased] with the remaining stock if successful, [PurchaseResult.InsufficientStock] if there is not enough quantity, [PurchaseResult.SkuNotFound] if the skuId doesn't exist.
+     */
+    fun removeStock(skuId: String, quantity: Int): PurchaseResult = jdbcClient.sql(
+        // Why: One statement instead of two (update, then select), so another request can't change the stock between them (a race condition)
+        """
+            WITH purchased AS (
+                UPDATE inventory SET quantity = quantity - :requested_quantity
+                    WHERE sku_id = :skuId AND quantity >= :requested_quantity
+                        RETURNING quantity
+            )
+            SELECT 
+                (SELECT quantity FROM purchased) AS remaining_quantity,
+                    EXISTS (SELECT 1 FROM inventory WHERE sku_id = :skuId) AS sku_exists
+        """
+        )
+        .param("skuId", skuId)
+        .param("requested_quantity", quantity)
+        .query{rs, _ ->
+                // Why: Used the javaObjectType so null stays null. JDBC getInt would turn null into 0, but 0 is a valid use case here. Meaning the last unit was just sold now the stock is 0. Null would be nothing was bought. We need to keep these distinct.
+                val remainingQuantity: Int? = rs.getObject("remaining_quantity", Int::class.javaObjectType) 
+                    val skuExists = rs.getBoolean("sku_exists")
+                        when {
+                            remainingQuantity != null -> PurchaseResult.Purchased(InventoryItem(skuId, remainingQuantity))
+                            skuExists -> PurchaseResult.InsufficientStock
+                            else -> PurchaseResult.SkuNotFound
+                        }
+        }
+        .single()
 }
