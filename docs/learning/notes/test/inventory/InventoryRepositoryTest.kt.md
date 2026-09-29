@@ -1,13 +1,16 @@
 # InventoryRepositoryTest.kt
 
-> Source: [src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepositoryTest.kt](../../../../../src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepositoryTest.kt) · Last synced with code: 2026-09-28
+> Source: [src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepositoryTest.kt](../../../../../src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryRepositoryTest.kt) · Last synced with code: 2026-09-29
 
 ## Role
 
 Tests the repository and the schema against a real Postgres. It checks that SQL results map to
 `InventoryItem`, that rows come back in order, that a single SKU can be looked up (or is `null`
-when missing), and that the database's `CHECK` constraint really blocks negative stock. That last test is the "Database backstop" item from the oversell test
-plan in `.claude/TODO.md`.
+when missing), that stock can be added (`addStock`) and removed (`removeStock`, whose three
+outcomes are a `PurchaseResult`), and that the database's `CHECK` constraint really blocks
+negative stock. That last test is the "Database backstop" item from the oversell test
+plan in `.claude/TODO.md`. The `removeStock` tests are that plan's "Correctness in isolation"
+item, written on 2026-09-29 before Robert's code.
 
 ## Walkthrough
 
@@ -338,6 +341,115 @@ fun `addStock treats SKU ids case-sensitively`() {
 **Why:** the upsert's conflict check (`ON CONFLICT (sku_id)`) uses the primary key, which
 compares `TEXT` exactly. So `WIDGET` doesn't conflict with `widget` and gets its own row.
 
+### removeStock: purchased, down to the last unit
+
+```kotlin
+/** Contract: "Deducts the requested quantity"; the remaining stock comes back. */
+@Test
+fun `removeStock deducts the quantity and returns the remaining stock`() {
+    insert("widget", 5)
+
+    assertEquals(PurchaseResult.Purchased(InventoryItem("widget", 3)), inventoryRepository.removeStock("widget", 2))
+    assertEquals(3, quantityOf("widget"))
+}
+
+// Why: the boundary of `quantity >= :quantity`; writing `>` instead would refuse the last unit.
+/** Buying exactly what is on hand succeeds and leaves a sold-out row with quantity 0, not a deleted one. */
+@Test
+fun `removeStock can sell the last unit and keeps the row at zero`() {
+    insert("widget", 5)
+
+    assertEquals(PurchaseResult.Purchased(InventoryItem("widget", 0)), inventoryRepository.removeStock("widget", 5))
+    assertEquals(0, quantityOf("widget"))
+}
+```
+
+**Why a `PurchaseResult` and not `InventoryItem?`:** `addStock` has two outcomes (a row, or `null`
+for overflow), so a nullable type is enough. A purchase has three: purchased, SKU not found, and
+not enough stock. `null` can't say *which* failure happened, and the API needs a `404` for one and
+a `400` for the other. `PurchaseResult` is a sealed type with one case per outcome (Robert's
+[PurchaseResult.kt](../../main/inventory/PurchaseResult.kt.md) explains it once he's written it).
+
+**Kotlin: comparing results with `assertEquals`.** `Purchased` wraps an `InventoryItem` and is a
+`data class`, so two `Purchased` values with equal items are equal. The test compares the whole
+result in one assertion.
+
+### removeStock: insufficient stock, never a partial fill
+
+```kotlin
+/** Contract: "only allowed if the current stock is sufficient to fulfill the full requested quantity": no partial fill. */
+@Test
+fun `removeStock refuses a purchase larger than the stock and changes nothing`() {
+    insert("widget", 5)
+
+    assertEquals(PurchaseResult.InsufficientStock, inventoryRepository.removeStock("widget", 6))
+    assertEquals(5, quantityOf("widget"))
+}
+
+/** A sold-out SKU exists, so buying from it is insufficient stock (400), not a missing SKU (404). */
+@Test
+fun `removeStock reports insufficient stock for a sold-out SKU`() {
+    insert("sold-out", 0)
+
+    assertEquals(PurchaseResult.InsufficientStock, inventoryRepository.removeStock("sold-out", 1))
+    assertEquals(0, quantityOf("sold-out"))
+}
+```
+
+**Why the sold-out case matters:** a row with quantity `0` is still a SKU. A check like "no
+remaining stock means not found" gets this wrong. Together with the last-unit test above, it also
+separates two answers that are easy to mix up in the mapping code: "the purchase left 0" and
+"nothing was bought".
+
+### removeStock: a missing SKU, and exact matching
+
+```kotlin
+/** Contract: "Returns 404 if the SKU does not exist"; a purchase must never create the SKU. */
+@Test
+fun `removeStock reports a missing SKU and creates nothing`() {
+    insert("widget", 5)
+
+    assertEquals(PurchaseResult.SkuNotFound, inventoryRepository.removeStock("missing", 1))
+    assertNull(quantityOf("missing"))
+}
+
+// Why: SKU ids are an exact, case-sensitive match (README "Contract gaps" decision, 2026-09-28).
+/** Buying `WIDGET` does not touch `widget`; `WIDGET` does not exist. */
+@Test
+fun `removeStock treats SKU ids case-sensitively`() {
+    insert("widget", 5)
+
+    assertEquals(PurchaseResult.SkuNotFound, inventoryRepository.removeStock("WIDGET", 1))
+    assertEquals(5, quantityOf("widget"))
+}
+```
+
+**Why `widget` exists in the missing-SKU test:** with an empty table, a query that checked "does
+*any* row exist" instead of "does *this* SKU exist" would still pass. The extra row makes that bug
+visible.
+
+**Kotlin: `data object` equality.** `SkuNotFound` and `InsufficientStock` carry no data, so each is
+a single `data object`, and `assertEquals` compares against that one instance.
+
+### removeStock: a decoy row
+
+```kotlin
+// Why: a decoy row catches an UPDATE that forgot `sku_id = :skuId` and hit every row.
+/** Buying one SKU leaves every other SKU alone. */
+@Test
+fun `removeStock changes only the given SKU`() {
+    insert("widget", 5)
+    insert("gadget", 3)
+
+    inventoryRepository.removeStock("widget", 2)
+
+    assertEquals(3, quantityOf("gadget"))
+}
+```
+
+The same idea as the [`addStock` decoy](#a-decoy-row): an `UPDATE` without its `WHERE` would take
+2 from *every* SKU, and `gadget` would drop to 1.
+
 ### The database backstop
 
 ```kotlin
@@ -384,3 +496,7 @@ the test discards everything anyway.
 - Which test fails if the overflow guard uses `<` where `<=` belongs? Which fails if it adds
   before comparing?
 - What does the `gadget` row prove that a one-row test can't?
+- Why can't `removeStock` return `InventoryItem?` the way `addStock` does?
+- Which `removeStock` test fails if the SQL uses `quantity > :quantity`? Which fails if the code
+  treats "remaining 0" as "nothing was bought"?
+- Why is buying from a sold-out SKU a `400` and not a `404`?
