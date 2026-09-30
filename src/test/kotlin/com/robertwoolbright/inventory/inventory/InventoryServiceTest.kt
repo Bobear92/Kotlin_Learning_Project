@@ -42,7 +42,7 @@ class InventoryServiceTest @Autowired constructor(
 
     // Why: a programming error, not a client error, so IllegalArgumentException (a 500), not a 400.
     /** A quantity below 1 is refused before the database is touched, and an existing SKU is unchanged. */
-    @ParameterizedTest(name = "quantity {0}")
+    @ParameterizedTest(name = "{displayName} [quantity {0}]")
     @ValueSource(ints = [0, -5])
     fun `receiveInventory rejects a quantity below 1 for an existing SKU`(quantity: Int) {
         insert("widget", 5)
@@ -52,7 +52,7 @@ class InventoryServiceTest @Autowired constructor(
     }
 
     /** A quantity below 1 for an unknown SKU must not create it. */
-    @ParameterizedTest(name = "quantity {0}")
+    @ParameterizedTest(name = "{displayName} [quantity {0}]")
     @ValueSource(ints = [0, -5])
     fun `receiveInventory rejects a quantity below 1 for a new SKU`(quantity: Int) {
         assertFailsWith<IllegalArgumentException> { inventoryService.receiveInventory("new-sku", quantity) }
@@ -86,7 +86,7 @@ class InventoryServiceTest @Autowired constructor(
 
     // Why: without the guard, 0 would be a no-op "purchase" and -5 would run `quantity - (-5)`: a purchase that adds stock.
     /** A quantity below 1 is refused before the database is touched. */
-    @ParameterizedTest(name = "quantity {0}")
+    @ParameterizedTest(name = "{displayName} [quantity {0}]")
     @ValueSource(ints = [0, -5])
     fun `purchaseInventory rejects a quantity below 1`(quantity: Int) {
         insert("widget", 5)

@@ -44,7 +44,7 @@ class InventoryConcurrencyTest @Autowired constructor(
      * New-SKU race: every first-time add for a missing SKU succeeds (no duplicate-key error from
      * two INSERTs colliding) and the final quantity is the sum of all of them.
      */
-    @RepeatedTest(5)
+    @RepeatedTest(value = 5, name = RepeatedTest.LONG_DISPLAY_NAME)
     fun `concurrent first-time adds for a new SKU all succeed and sum up`() {
         val threads = 50
 
@@ -57,7 +57,7 @@ class InventoryConcurrencyTest @Autowired constructor(
     }
 
     /** Lost-update race: concurrent restocks of one existing SKU all count; none overwrites another. */
-    @RepeatedTest(5)
+    @RepeatedTest(value = 5, name = RepeatedTest.LONG_DISPLAY_NAME)
     fun `concurrent adds to an existing SKU are never lost`() {
         jdbcClient.sql("INSERT INTO inventory (sku_id, quantity) VALUES ('widget', 10)").update()
         val threads = 50
@@ -75,7 +75,7 @@ class InventoryConcurrencyTest @Autowired constructor(
      * Same-SKU purchase race: with stock S and N > S buyers of 1, exactly S succeed, N - S are refused
      * as insufficient stock, and the SKU ends at 0, never negative.
      */
-    @RepeatedTest(5)
+    @RepeatedTest(value = 5, name = RepeatedTest.LONG_DISPLAY_NAME)
     fun `concurrent purchases never sell more than the stock`() {
         val stock = 10
         jdbcClient.sql("INSERT INTO inventory (sku_id, quantity) VALUES ('widget', ?)").param(stock).update()
@@ -92,7 +92,7 @@ class InventoryConcurrencyTest @Autowired constructor(
      * Uneven quantities: buyers of different sizes race for one SKU. What was sold never exceeds the
      * stock, and the final quantity is exactly the stock minus what was sold.
      */
-    @RepeatedTest(5)
+    @RepeatedTest(value = 5, name = RepeatedTest.LONG_DISPLAY_NAME)
     fun `concurrent purchases of different sizes never oversell`() {
         val stock = 100
         jdbcClient.sql("INSERT INTO inventory (sku_id, quantity) VALUES ('widget', ?)").param(stock).update()
@@ -118,7 +118,7 @@ class InventoryConcurrencyTest @Autowired constructor(
      * Mixed receive and purchase race: restocks and purchases of one SKU interleave. Every restock
      * counts, every successful purchase counts, nothing else changes the stock.
      */
-    @RepeatedTest(5)
+    @RepeatedTest(value = 5, name = RepeatedTest.LONG_DISPLAY_NAME)
     fun `concurrent restocks and purchases keep an exact balance`() {
         val initial = 20
         jdbcClient.sql("INSERT INTO inventory (sku_id, quantity) VALUES ('widget', ?)").param(initial).update()

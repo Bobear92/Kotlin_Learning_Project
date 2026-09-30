@@ -126,7 +126,7 @@ Flyway's history table and does nothing.
 
 ```kotlin
 /** Buyers of 1 alternate between the instances; the oversell check is the same as for one instance. */
-@RepeatedTest(3)
+@RepeatedTest(value = 3, name = RepeatedTest.LONG_DISPLAY_NAME)
 fun `purchases split across two instances never oversell`() {
     val stock = 10
     instanceA.receive("widget", stock)

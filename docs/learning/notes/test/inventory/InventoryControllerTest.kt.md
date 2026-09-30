@@ -359,7 +359,7 @@ updated inventory state." The body holds the new total (8), not the amount poste
 
 ```kotlin
 /** Contract: `quantity` has `minimum: 1`, so 0 and negatives are a 400 and stock is untouched. */
-@ParameterizedTest(name = "quantity {0}")
+@ParameterizedTest(name = "{displayName} [quantity {0}]")
 @ValueSource(ints = [0, -5])
 fun `POST inventory rejects a quantity below 1`(quantity: Int) {
     insert("widget", 5)
@@ -372,8 +372,12 @@ fun `POST inventory rejects a quantity below 1`(quantity: Int) {
 
 **JUnit: parameterized tests.** `@ParameterizedTest` runs the method once for each value from
 the source. `@ValueSource(ints = [0, -5])` supplies the values, and each one arrives as the
-`quantity` parameter. `name = "quantity {0}"` sets the display name, so the report lists
-`quantity 0` and `quantity -5` as separate results.
+`quantity` parameter. `name = "{displayName} [quantity {0}]"` sets each run's display name:
+`{displayName}` is the method's own name and `{0}` the value, so the report lists
+`` POST inventory rejects a quantity below 1(int) [quantity 0] `` (the parameter types appear in
+the parentheses) and `... [quantity -5]` as separate
+results. (Until 2026-09-30 the pattern was just `"quantity {0}"`; the CI test report then showed a
+bare `quantity 0` with no hint of which test it belonged to.)
 
 **Kotlin: array literals in annotations.** `[0, -5]` is Kotlin's syntax for an array argument
 inside an annotation. Java writes it `{0, -5}`. Outside annotations you'd write `intArrayOf(0, -5)`.
@@ -409,7 +413,7 @@ before anything is written.
 // Why: strict JSON (README "Contract gaps" decision, 2026-09-28). Jackson's defaults would turn
 // "5" into 5 and 1.5 into 1; stock counts must never be guessed.
 /** Any body that isn't `{"quantity": <whole number that fits in Int>}` is a 400 text/plain. */
-@ParameterizedTest(name = "body [{0}]")
+@ParameterizedTest(name = "{displayName} [body {0}]")
 @ValueSource(
     strings = [
         "",
@@ -607,7 +611,7 @@ create a SKU. A buggy upsert-style purchase would.
 ### Purchase: invalid requests reuse the existing handlers
 
 ```kotlin
-@ParameterizedTest(name = "quantity {0}")
+@ParameterizedTest(name = "{displayName} [quantity {0}]")
 @ValueSource(ints = [0, -5])
 fun `POST purchase rejects a quantity below 1`(quantity: Int) {
 ...
@@ -622,7 +626,7 @@ fun `POST purchase with an invalid quantity for a missing SKU is a 400`() {
         .andExpectBadRequest("quantity must be at least 1")
 }
 
-@ParameterizedTest(name = "body [{0}]")
+@ParameterizedTest(name = "{displayName} [body {0}]")
 @ValueSource(strings = [ /* the same nine bodies as for POST inventory */ ])
 fun `POST purchase rejects an unreadable body`(body: String) { ... }
 
