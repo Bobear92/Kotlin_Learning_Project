@@ -1,6 +1,6 @@
 # InventoryConcurrencyTest.kt
 
-> Source: [src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryConcurrencyTest.kt](../../../../../src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryConcurrencyTest.kt) · Last synced with code: 2026-09-29
+> Source: [src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryConcurrencyTest.kt](../../../../../src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryConcurrencyTest.kt) · Last synced with code: 2026-09-30
 
 ## Role
 
@@ -54,69 +54,10 @@ MockMvc, which isn't meant to be called from many threads.
 
 ### The start gate
 
-```kotlin
-// Why: a start gate. Every thread first checks in on `ready`, then waits on `start`; releasing
-// `start` once makes them all hit the database together instead of one after another.
-private fun <T> race(threads: Int, action: (Int) -> T): List<Result<T>> {
-    val pool = Executors.newFixedThreadPool(threads)
-    val ready = CountDownLatch(threads)
-    val start = CountDownLatch(1)
-    try {
-        val futures = (0 until threads).map { i ->
-            pool.submit(Callable {
-                ready.countDown()
-                start.await()
-                action(i)
-            })
-        }
-        ready.await()
-        start.countDown()
-        return futures.map { runCatching { it.get(30, TimeUnit.SECONDS) } }
-    } finally {
-        pool.shutdownNow()
-    }
-}
-```
-
-**Why a gate at all:** starting 50 threads one by one in a loop spreads them out in time. The
-first threads may finish before the last ones start, and then there's no race to test. The gate
-makes them all wait at the same line and releases them together.
-
-**Java concurrency: `CountDownLatch`.** A counter threads can wait on. `countDown()` decrements
-it; `await()` blocks until it reaches zero. There are two latches here:
-
-1. `ready` starts at `threads`. Each worker counts it down as it arrives, and the test thread's
-   `ready.await()` returns once all of them are waiting.
-2. `start` starts at 1. Every worker blocks on `start.await()`. The test's single
-   `start.countDown()` releases all of them at once.
-
-**Java concurrency: thread pool and futures.** `Executors.newFixedThreadPool(threads)` makes one
-thread per worker, so all of them can wait at the gate together (a smaller pool would deadlock:
-the queued tasks could never arrive at `ready`). `submit` returns a `Future`; `get(30, SECONDS)`
-waits for its result and rethrows anything the task threw, wrapped in an `ExecutionException`.
-The timeout makes a hung test fail instead of running forever. `shutdownNow()` in `finally`
-stops the threads even when something failed.
-
-**Kotlin: a generic function.** `fun <T> race(..., action: (Int) -> T): List<Result<T>>` works for
-any result type. `T` is whatever `action` returns: `InventoryItem?` for `addStock`,
-`PurchaseResult` for `removeStock`, a `Pair` or an `Int` in the purchase races below. Java writes it the same way: `<T> List<Result<T>> race(...)`.
-
-**Kotlin: function types.** `action: (Int) -> T` is a parameter that holds a function taking an
-`Int` (the thread's index) and returning a `T`. Java would use `IntFunction<T>` or
-`Function<Integer, T>`. The call sites pass a trailing lambda: `race(threads) { i -> ... }`.
-
-**Kotlin: `Callable { ... }`.** `submit` is overloaded for `Runnable` (no result) and `Callable`
-(returns a result). Writing `Callable { ... }` picks the one that returns a value. This is a SAM
-conversion, like the row mapper in [InventoryRepository.kt](../../main/inventory/InventoryRepository.kt.md).
-
-**Kotlin: ranges.** `0 until threads` is `0, 1, ..., threads - 1` (the end is excluded), and
-`.map { i -> ... }` turns each index into a submitted task. Java: `IntStream.range(0, threads)`.
-
-**Kotlin: `runCatching` and `Result`.** `runCatching { block }` runs the block and returns a
-`Result`: a success holding the value, or a failure holding the exception. Nothing is thrown.
-That lets the test collect *every* thread's outcome first, then assert on all of them together.
-`exceptionOrNull()` and `getOrNull()` read the two sides. Java has no built-in equivalent; you'd
-catch the exception in a loop and keep it in a list.
+Every race below runs through `race(threads) { i -> ... }`, the start gate in
+[support/Race.kt](../support/Race.kt.md). That file's notes explain the two `CountDownLatch`es,
+the thread pool, generic functions, function types and `runCatching`. The helper moved there on
+2026-09-30 so the negative control and the HTTP races can share it.
 
 ### The new-SKU creation race
 
@@ -184,8 +125,8 @@ leave it out; if needed, it's available as `it`.
 ### The same-SKU purchase race
 
 ```kotlin
-// Why: the "remaining" values prove each unit was sold exactly once. Two buyers who both read
-// stock 10 and wrote 9 would both see 9, and 0..9 would not come back as a clean set.
+// Why: assertNoOversell also checks the "remaining" values, proving each unit was sold exactly
+// once; NegativeControlTest shows it catches two buyers who both read 10 and both wrote 9.
 /**
  * Same-SKU purchase race: with stock S and N > S buyers of 1, exactly S succeed, N - S are refused
  * as insufficient stock, and the SKU ends at 0, never negative.
@@ -200,11 +141,7 @@ fun `concurrent purchases never sell more than the stock`() {
 
     val failures = results.mapNotNull { it.exceptionOrNull() }
     assertTrue(failures.isEmpty(), "purchases failed: $failures")
-    val outcomes = results.map { it.getOrThrow() }
-    val remaining = outcomes.filterIsInstance<PurchaseResult.Purchased>().map { it.item.quantity }.sorted()
-    assertEquals((0 until stock).toList(), remaining)
-    assertEquals(threads - stock, outcomes.count { it == PurchaseResult.InsufficientStock })
-    assertEquals(0, quantityOf("widget"))
+    assertNoOversell(stock, results.map { it.getOrThrow() }, quantityOf("widget"))
 }
 ```
 
@@ -227,27 +164,16 @@ who all read 10 at once:
 
 More than 10 units are "sold", yet every value written is `>= 0`, so the constraint never fires.
 The stock can even end *above* 0. The constraint protects "stock is never negative", not "every
-unit is sold once". Assertion 1 below is the one that fails first.
+unit is sold once". The shared oversell check's first assertion is the one that fails.
 
-**Three assertions, three kinds of bug:**
-
-1. `remaining == [0, 1, ..., 9]`: each successful buyer saw a *different* remaining quantity, so
-   each of the 10 units was sold exactly once. A lost update would show a repeated value.
-2. Exactly `threads - stock` (40) were refused as `InsufficientStock`, and none were reported as
-   `SkuNotFound`, which would be the wrong error for a SKU that exists.
-3. The final quantity is 0: not negative (oversold) and not above 0 (a buyer refused while stock
-   remained).
+**The checks live in [OversellAssertions.kt](OversellAssertions.kt.md).** `assertNoOversell`
+asserts that nothing is oversold, each unit is sold exactly once (the remaining values are
+`0..9`), exactly `threads - stock` buyers are refused, and the SKU ends at 0. It's shared so
+[NegativeControlTest.kt](NegativeControlTest.kt.md) can prove these very checks catch the naive
+purchase from the table above.
 
 **Kotlin: `getOrThrow()`.** Reads a `Result`'s value, or rethrows its exception. It's safe here
 because the line before already asserted there are no failures.
-
-**Kotlin: `filterIsInstance<T>()`.** Keeps only the elements that are a `T`, *and* gives back a
-`List<T>`, so `it.item` compiles without a cast. It's the list version of the smart cast after
-`is`. Java: `.filter(x -> x instanceof Purchased).map(x -> (Purchased) x)`.
-
-**Kotlin: comparing to a `data object`.** `it == PurchaseResult.InsufficientStock` works because a
-`data object` is a single instance with a generated `equals`. `count { ... }` counts the elements
-that match.
 
 ### Uneven quantities
 
@@ -342,16 +268,11 @@ otherwise throws `IllegalStateException("msg")`. `error("msg")` always throws on
 ## Check your understanding
 
 - Why would these tests be unreliable under `@JdbcTest`? Give both reasons.
-- What happens to the race if you delete the `start` latch and keep only `ready`? And if you
-  delete both?
-- Why must the thread pool have `threads` threads, and not, say, 10?
 - The new-SKU test adds `i + 1` rather than a constant. Describe a bug the constant version
   would miss.
-- `race` returns `List<Result<T>>` instead of throwing on the first failure. What would the
-  test report lose if it threw?
 - Why run each test five times? Does passing five times prove there's no race?
-- In the same-SKU race, a read-then-write purchase sells 12 units out of 10. Which of the three
-  assertions fail, and what does each one show?
+- In the same-SKU race, a read-then-write purchase sells 12 units out of 10. Which checks in
+  `assertNoOversell` would fail, and what does each one show?
 - The uneven-quantities test asserts `sold <= stock`, not `sold == stock`. Why can't it expect all
   100 units to sell?
 - In the mixed race, why does the `when` need no `else` branch? What happens to it if a fourth

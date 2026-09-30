@@ -2,16 +2,13 @@
 package com.robertwoolbright.inventory.inventory
 
 import com.robertwoolbright.inventory.support.TestcontainersConfiguration
+import com.robertwoolbright.inventory.support.race
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.RepeatedTest
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.simple.JdbcClient
-import java.util.concurrent.Callable
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -43,28 +40,6 @@ class InventoryConcurrencyTest @Autowired constructor(
             .list()
             .singleOrNull()
 
-    // Why: a start gate. Every thread first checks in on `ready`, then waits on `start`; releasing
-    // `start` once makes them all hit the database together instead of one after another.
-    private fun <T> race(threads: Int, action: (Int) -> T): List<Result<T>> {
-        val pool = Executors.newFixedThreadPool(threads)
-        val ready = CountDownLatch(threads)
-        val start = CountDownLatch(1)
-        try {
-            val futures = (0 until threads).map { i ->
-                pool.submit(Callable {
-                    ready.countDown()
-                    start.await()
-                    action(i)
-                })
-            }
-            ready.await()
-            start.countDown()
-            return futures.map { runCatching { it.get(30, TimeUnit.SECONDS) } }
-        } finally {
-            pool.shutdownNow()
-        }
-    }
-
     /**
      * New-SKU race: every first-time add for a missing SKU succeeds (no duplicate-key error from
      * two INSERTs colliding) and the final quantity is the sum of all of them.
@@ -94,8 +69,8 @@ class InventoryConcurrencyTest @Autowired constructor(
         assertEquals(10 + threads * 2, quantityOf("widget"))
     }
 
-    // Why: the "remaining" values prove each unit was sold exactly once. Two buyers who both read
-    // stock 10 and wrote 9 would both see 9, and 0..9 would not come back as a clean set.
+    // Why: assertNoOversell also checks the "remaining" values, proving each unit was sold exactly
+    // once; NegativeControlTest shows it catches two buyers who both read 10 and both wrote 9.
     /**
      * Same-SKU purchase race: with stock S and N > S buyers of 1, exactly S succeed, N - S are refused
      * as insufficient stock, and the SKU ends at 0, never negative.
@@ -110,11 +85,7 @@ class InventoryConcurrencyTest @Autowired constructor(
 
         val failures = results.mapNotNull { it.exceptionOrNull() }
         assertTrue(failures.isEmpty(), "purchases failed: $failures")
-        val outcomes = results.map { it.getOrThrow() }
-        val remaining = outcomes.filterIsInstance<PurchaseResult.Purchased>().map { it.item.quantity }.sorted()
-        assertEquals((0 until stock).toList(), remaining)
-        assertEquals(threads - stock, outcomes.count { it == PurchaseResult.InsufficientStock })
-        assertEquals(0, quantityOf("widget"))
+        assertNoOversell(stock, results.map { it.getOrThrow() }, quantityOf("widget"))
     }
 
     /**
