@@ -28,7 +28,8 @@ and checks items off as they are done. Newest decisions are recorded in the READ
 - [x] Spring Boot + Kotlin + Gradle Kotlin DSL project (Initializr, versions pinned in README) (2026-09-23)
 - [x] Docker Compose file for Postgres; Spring Boot Docker Compose support for `bootRun` (2026-09-23)
 - [x] Testcontainers for tests (`support/TestcontainersConfiguration.kt`) (2026-09-23)
-- [ ] README "Build and run" section verified from a clean clone (verified in the working tree only)
+- [x] README "Build and run" section verified from a clean clone: `git clone`, `./gradlew build` (green),
+      `./gradlew bootRun`, every "Try it" call checked (2026-09-30)
 - [x] `V1__create_inventory.sql` migration (table + `CHECK (quantity >= 0)`), written by Robert (2026-09-24)
 - [x] `/walkthrough` of the scaffold (build.gradle.kts, compose.yaml, application.yml, the three .kt files) (2026-09-23)
 
@@ -74,17 +75,26 @@ and checks items off as they are done. Newest decisions are recorded in the READ
 - [x] Contract-validation test: check MockMvc responses against inventory.yaml. `InventoryContractTest` (17 tests:
       every status of all four endpoints + 7 validator self-checks), Atlassian `openapi-request-validator-mockmvc:3.0.0`,
       `InventoryItem` fields required (strict, Robert, 2026-09-30); README "Contract validation" row (2026-09-30)
-- [ ] Decide on demo seed data for a running app (`POST /inventory/{skuId}` now exists)
+- [x] Decide on demo seed data for a running app: none; the README "Try it" examples create their own stock (Robert, 2026-09-30)
 - [x] Error handling: `text/plain` 400/404 bodies exactly as the contract specifies
       (404 for missing SKU done 2026-09-27 via `InventoryExceptionHandler`; POST's four 400s done 2026-09-28; purchase's 400/404 done 2026-09-29)
-- [ ] Decide whether error responses should declare `charset=UTF-8` (the contract validator accepts `text/plain;charset=UTF-8`, checked 2026-09-30): today `Content-Type: text/plain` has no charset while the body is UTF-8 (seen with `curl` on 2026-09-27; only matters for non-ASCII SKUs)
+- [x] Decided: error responses stay `text/plain` without a charset; risk recorded in the README (Robert, 2026-09-30). Was: decide whether error responses should declare `charset=UTF-8` (the contract validator accepts `text/plain;charset=UTF-8`, checked 2026-09-30): today `Content-Type: text/plain` has no charset while the body is UTF-8 (seen with `curl` on 2026-09-27; only matters for non-ASCII SKUs)
 
 ## Working notes
 
 - 2026-09-30, branch `test/oversell-hardening`: one testing `/feature` covering every open test-plan item
   plus the contract-validation test. Decided (Robert): test-only naive repository, load test as JUnit +
   `HttpClient` in a separate `./gradlew loadTest`, Kotest property for property tests. All parts done
-  (suite 124/124 + `loadTest`); README test claims match. Next: walkthrough, then `/ship`.
+  (suite 124/124 + `loadTest`); README test claims match. Shipped PR #8; walkthrough partial (log lists the rest).
+- 2026-09-30: CI with a readable test report (PR #9), authorship audit (PR #10), then `docs/submission-polish`:
+  README "How this was built" + `docs/how-this-was-built.md`, verified "Try it" flow, charset and seed-data decisions.
+
+## Submission
+
+- [ ] Robert reviews `docs/how-this-was-built.md` (it's written in his voice; confirm his background line)
+- [ ] Optional before the interview: finish the 2026-09-30 walkthrough (contract, property, HTTP client,
+      multi-instance, load tests)
+- [ ] Robert notifies the recruiter that the repository is ready
 
 ## Oversell protection: test plan
 
