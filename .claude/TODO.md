@@ -34,6 +34,11 @@ and checks items off as they are done. Newest decisions are recorded in the READ
 
 ## Tooling
 
+- [x] GitHub Actions CI (`.github/workflows/tests.yml`): `Tests` (`./gradlew build`) and `Load test`
+      (`./gradlew loadTest`) jobs on every push, PR and manual run, with a readable run summary from
+      `scripts/test_report.py` and the HTML reports as artifacts. `/ship` waits for both checks.
+      Repeated and parameterized tests now carry their method name in reports (2026-09-30)
+
 - [x] `scripts/check_notes.py` no longer waits on stdin when run by hand: hook mode is now an explicit `--hook` flag (2026-09-24)
 
 ## Features (one `/feature` + `/walkthrough` each)

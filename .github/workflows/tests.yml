@@ -1,0 +1,72 @@
+# Runs the test suite and the load test on GitHub's servers and writes a readable report to each
+# run's summary page (Actions tab -> a run). The report comes from scripts/test_report.py.
+name: Tests
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+  # Adds a "Run workflow" button on the Actions tab, e.g. for a fresh run during a demo.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      # Caches Gradle and its dependencies between runs.
+      - uses: gradle/actions/setup-gradle@v6
+
+      # Why: `build` = compile + every test except the load test + package. Testcontainers starts
+      # Postgres through the runner's preinstalled Docker, exactly as on a laptop.
+      - name: Build and test
+        run: ./gradlew build
+
+      # Why: `if: always()` so the report is written even when tests fail; that's when it matters most.
+      - name: Test report
+        if: always()
+        run: python3 scripts/test_report.py build/test-results/test >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload HTML test report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-report
+          path: build/reports/tests/test
+
+  # Why: a separate job runs in parallel with `tests`, so the 20-second load run doesn't make the
+  # regular check slower. GitHub's shared runners are small: treat the numbers as a smoke test.
+  load-test:
+    name: Load test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Load test
+        run: ./gradlew loadTest
+
+      - name: Load test report
+        if: always()
+        run: python3 scripts/test_report.py build/test-results/loadTest >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload HTML load test report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: load-test-report
+          path: build/reports/tests/loadTest
