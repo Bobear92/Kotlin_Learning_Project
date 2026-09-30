@@ -1,6 +1,6 @@
 # build.gradle.kts
 
-> Source: [build.gradle.kts](../../../build.gradle.kts) · Last synced with code: 2026-09-28
+> Source: [build.gradle.kts](../../../build.gradle.kts) · Last synced with code: 2026-09-30
 
 ## Role
 
@@ -141,12 +141,24 @@ Flyway, JDBC and Web MVC each have their own starter and test starter.
 
 ### Test dependencies
 
+```kotlin
+    testImplementation("org.testcontainers:testcontainers-postgresql")
+    // Checks MockMvc responses against inventory.yaml (the contract-validation test).
+    testImplementation("com.atlassian.oai:openapi-request-validator-mockmvc:3.0.0")
+```
+
+**Gradle: an explicit version.** Most dependencies here have no version because Spring Boot's BOM
+supplies one. The Atlassian validator isn't in that BOM, so its version is written into the
+coordinate (`group:artifact:version`). Chosen 2026-09-30: it reads the YAML itself, so the test
+can't drift from the contract, and it plugs into MockMvc as a `ResultMatcher`.
+
 | Dependency | What it gives us |
 | --- | --- |
 | `spring-boot-starter-{flyway,jdbc,webmvc}-test` | Test support for each module, e.g. `@WebMvcTest` + `MockMvc` and `@JdbcTest`. They also pull in `spring-boot-starter-test`: JUnit Jupiter 6, AssertJ, Mockito. |
 | `spring-boot-testcontainers` | `@ServiceConnection`, which turns a running container into DataSource settings. |
 | `kotlin-test-junit5` | `kotlin.test` assertions (`assertEquals`, `assertFailsWith`) backed by JUnit Jupiter. The artifact keeps its old `junit5` name, but it runs fine on JUnit 6. |
 | `testcontainers-junit-jupiter`, `testcontainers-postgresql` | Start a real Postgres in Docker for tests. |
+| `openapi-request-validator-mockmvc` (Atlassian, `3.0.0`) | Checks MockMvc responses against `inventory.yaml` in [InventoryContractTest.kt](test/inventory/InventoryContractTest.kt.md). Not managed by Spring Boot's BOM, so it carries an explicit version. Formerly `swagger-request-validator-mockmvc`; 3.0 is built for Spring 7 and Java 21. It brings Jackson 2 along (`com.fasterxml.jackson`), which lives in different packages from the app's Jackson 3 (`tools.jackson`), so the two don't clash. |
 | `junit-platform-launcher` | Gradle 9 no longer bundles the JUnit Platform launcher; it has to be on the test runtime classpath. |
 
 **Why:** tests run against real Postgres instead of H2, an in-memory database that imitates

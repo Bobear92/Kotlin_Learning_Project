@@ -61,12 +61,13 @@ and checks items off as they are done. Newest decisions are recorded in the READ
       2026-09-29 (new: `PurchaseResult`, `InsufficientInventoryException`); purchase decisions recorded in the README
       ("Contract gaps (purchase)"). Walkthrough done 2026-09-29. Shipped: PR #6 (e4f2aad, 2026-09-29)
 - [x] `/walkthrough` of `POST /inventory/{skuId}/purchase` (2026-09-29; three new interview-prep questions)
-- [ ] Contract-validation test: check MockMvc responses against inventory.yaml (decided with the
-      Controllers decision; all four endpoints now exist, so it's ready to do)
+- [x] Contract-validation test: check MockMvc responses against inventory.yaml. `InventoryContractTest` (17 tests:
+      every status of all four endpoints + 7 validator self-checks), Atlassian `openapi-request-validator-mockmvc:3.0.0`,
+      `InventoryItem` fields required (strict, Robert, 2026-09-30); README "Contract validation" row (2026-09-30)
 - [ ] Decide on demo seed data for a running app (`POST /inventory/{skuId}` now exists)
 - [x] Error handling: `text/plain` 400/404 bodies exactly as the contract specifies
       (404 for missing SKU done 2026-09-27 via `InventoryExceptionHandler`; POST's four 400s done 2026-09-28; purchase's 400/404 done 2026-09-29)
-- [ ] Decide whether error responses should declare `charset=UTF-8`: today `Content-Type: text/plain` has no charset while the body is UTF-8 (seen with `curl` on 2026-09-27; only matters for non-ASCII SKUs)
+- [ ] Decide whether error responses should declare `charset=UTF-8` (the contract validator accepts `text/plain;charset=UTF-8`, checked 2026-09-30): today `Content-Type: text/plain` has no charset while the body is UTF-8 (seen with `curl` on 2026-09-27; only matters for non-ASCII SKUs)
 
 ## Oversell protection: test plan
 
@@ -104,7 +105,7 @@ class of bug. Each item below is also a teaching topic for a walkthrough.
       tagged `load`, run by a separate `./gradlew loadTest`; property tests = Kotest property. Done: `race()`
       moved to `support/Race.kt`, shared `assertNoOversell` in `OversellAssertions.kt`, `NegativeControlTest` written.
       Done: Robert's `NaiveInventoryRepository`; both negative-control tests green, full suite 100/100 (2026-09-30).
-      Next: contract-validation test.
+      Contract-validation test done (2026-09-30). Next: property-based test (Kotest property).
 
 ### Database backstop
 - [x] Test that the `CHECK (quantity >= 0)` constraint rejects a direct update that would go

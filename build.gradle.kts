@@ -40,6 +40,8 @@ dependencies {
     // Why: tests run against real Postgres, not H2; oversell protection depends on Postgres behavior.
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
+    // Checks MockMvc responses against inventory.yaml (the contract-validation test).
+    testImplementation("com.atlassian.oai:openapi-request-validator-mockmvc:3.0.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
