@@ -168,6 +168,30 @@ KDoc states that precondition, and the service's `require` enforces it.
 Notes: [InventoryRepository.kt, the overflow guard](notes/main/inventory/InventoryRepository.kt.md#the-overflow-guard)
 </details>
 
+### Your table has `CHECK (quantity >= 0)`. Isn't that enough to prevent overselling?
+
+<details>
+<summary>Answer</summary>
+
+No. The constraint protects one invariant, "stock is never negative". It doesn't validate intent,
+and two real bugs pass it:
+
+- **A negative purchase.** Without the service's `require`, `purchaseInventory("widget", -5)` on
+  a stock of 10 runs `WHERE 10 >= -5` (true) and `SET quantity = 10 - (-5)`, so the stock goes
+  *up* to 15. `15 >= 0`, so the `CHECK` passes. Only the `require` stops it.
+- **A lost update.** The naive purchase reads the stock, checks it in Kotlin, then writes an
+  absolute value. Twelve buyers who all read 10 all write `SET quantity = 9`: twelve sales, one
+  unit gone. Every value written is `>= 0`, so the `CHECK` never fires.
+
+What actually prevents overselling is putting the check *inside* the write:
+`UPDATE ... SET quantity = quantity - :n WHERE quantity >= :n`. Postgres locks the row, and a
+waiting `UPDATE` re-checks its `WHERE` against the newly committed value. The `CHECK` is the last
+line of defense if that SQL were ever wrong. Input validation still belongs in the application.
+
+Notes: [InventoryService.kt, `purchaseInventory`](notes/main/inventory/InventoryService.kt.md#purchaseinventory-one-branch-per-outcome),
+[InventoryConcurrencyTest.kt, purchase race](notes/test/inventory/InventoryConcurrencyTest.kt.md#the-same-sku-purchase-race)
+</details>
+
 ## API design and validation
 
 ### How does your API validate input?
@@ -269,6 +293,28 @@ handler, because without it Spring's built-in resolver answers `HttpMediaTypeNot
 with `415` and a JSON body.
 
 Notes: [InventoryController.kt](notes/main/inventory/InventoryController.kt.md#post-inventoryskuid)
+</details>
+
+### A purchase has an invalid quantity *and* a SKU that doesn't exist. `400` or `404`?
+
+<details>
+<summary>Answer</summary>
+
+`400`. Spring handles a request in a fixed order, and everything before the handler function runs
+first:
+
+```
+1. Routing          /inventory/missing/purchase → purchaseInventory  ({skuId} matches any text)
+2. @RequestBody     Content-Type, then Jackson reads the JSON          → 400
+3. @Valid           @Min(1) on quantity                                 → 400  ← {"quantity": 0} stops here
+4. handler → service → repository → SQL                                 → 404  ← "missing" is found here
+```
+
+Routing has no idea which SKUs exist, so `missing` is a valid URL. Only the SQL in step 4 finds
+out, and a bad body never gets there. It's also the cheaper order: a malformed request never costs
+a database round trip. `InventoryControllerTest` pins it.
+
+Notes: [InventoryController.kt, purchase](notes/main/inventory/InventoryController.kt.md#post-inventoryskuidpurchase)
 </details>
 
 ## Kotlin
@@ -411,6 +457,25 @@ equality, because `==` calls `equals`). It does **not** make the class immutable
 `copy` returns a new object and leaves the original unchanged.
 
 Notes: [InventoryItem.kt](notes/main/inventory/InventoryItem.kt.md)
+</details>
+
+### Why does `removeStock` return a sealed `PurchaseResult` instead of `InventoryItem?` or throwing?
+
+<details>
+<summary>Answer</summary>
+
+A purchase has three outcomes: bought, not enough stock (`400`), and no such SKU (`404`). A `null`
+can only carry one failure, so the service would need a second query to learn which, and the stock
+could change in between. Throwing from the repository works, but then the repository decides what
+counts as an error, which is the service's job.
+
+`sealed interface PurchaseResult` with `Purchased(item)`, `SkuNotFound` and `InsufficientStock`
+carries each outcome separately. Because it's sealed, the service's `when` needs no `else`: if
+someone adds a fourth case, that `when` stops compiling until it's handled, instead of falling
+silently into an `else`. `Purchased` is a `data class` because it carries data. The failures are
+`data object`s, one instance each.
+
+Notes: [PurchaseResult.kt](notes/main/inventory/PurchaseResult.kt.md)
 </details>
 
 ## Spring

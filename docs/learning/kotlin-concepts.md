@@ -66,6 +66,7 @@ and `/walkthrough` add rows as new concepts come up.
 | `Int::class.java` vs `javaObjectType` | `.java` is the primitive `int.class`, `.javaObjectType` the boxed `Integer.class` (can hold `null`) | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
 | KDoc links `[Name]` | Square brackets in KDoc link to a declaration; Javadoc's `{@link}` | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
 | `when` with a subject, `is` and exhaustiveness | `when (val x = ...) { is A -> ...; B -> ... }`: type checks and equality; no `else` needed over a sealed type | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md#purchaseinventory-one-branch-per-outcome) |
+| `filterIsInstance<T>()` | Keeps the elements of type `T` and returns a `List<T>`: a smart cast for a whole list | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md#the-same-sku-purchase-race) |
 | `return` and a line break | A line break after a bare `return` ends the statement; the value has to start on the same line | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md#purchaseinventory-one-branch-per-outcome) |
 
 ## Spring
@@ -109,6 +110,7 @@ and `/walkthrough` add rows as new concepts come up.
 | `@RepeatedTest` | Runs a test N times; used for intermittent concurrency bugs | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
 | Test transactions are per thread | A `@JdbcTest` rollback covers only the test thread; worker threads commit on their own connections | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
 | Start gate (`CountDownLatch`) | Hold N threads at one line, then release them together so they really overlap | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
+| Request processing order | Routing → `@RequestBody` (Content-Type, then Jackson) → `@Valid` → the handler function; a bad body is a `400` before any database lookup could give a `404` | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md#post-inventoryskuidpurchase) |
 | `@PostMapping` + `@RequestBody` | Map a POST; Jackson reads the JSON body into a class through its primary constructor | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
 | `@Valid` + Bean Validation (`@Min`) | Constraints on a request class run only when the parameter has `@Valid`; failures throw `MethodArgumentNotValidException` | [InventoryQuantity.kt](notes/main/inventory/InventoryQuantity.kt.md) |
 | Request body failure order | Content-Type → JSON read → validation → the function; each failure is its own Spring exception | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |

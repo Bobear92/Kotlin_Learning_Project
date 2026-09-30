@@ -214,6 +214,21 @@ another buyer can do the same, and both sell the same last unit. The conditional
 `UPDATE ... WHERE quantity >= :quantity` does the check and the write in one statement under a row
 lock, so the second buyer waits and then re-checks against the new value.
 
+**Why `CHECK (quantity >= 0)` wouldn't catch the naive version (walkthrough, 2026-09-29):** the
+naive code writes an absolute value (`SET quantity = 9`), not a relative one. Picture twelve buyers
+who all read 10 at once:
+
+| | Buyers 1–12 (together) | Buyer 13 (a moment later) |
+| --- | --- | --- |
+| Read | all read `10` | reads `9` |
+| Kotlin check | `10 >= 1` passes for all | passes |
+| Write | all run `SET quantity = 9` | `SET quantity = 8` |
+| Returned | twelve `Purchased(widget, 9)` | `Purchased(widget, 8)` |
+
+More than 10 units are "sold", yet every value written is `>= 0`, so the constraint never fires.
+The stock can even end *above* 0. The constraint protects "stock is never negative", not "every
+unit is sold once". Assertion 1 below is the one that fails first.
+
 **Three assertions, three kinds of bug:**
 
 1. `remaining == [0, 1, ..., 9]`: each successful buyer saw a *different* remaining quantity, so
