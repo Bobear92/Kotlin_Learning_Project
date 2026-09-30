@@ -32,9 +32,10 @@ client is thread-safe and keeps a pool of connections, so fifty racing threads s
 `send(request, BodyHandlers.ofString())` blocks until the response arrives and gives the body as a
 `String`.
 
-**Why HTTP/1.1:** the JDK client defaults to HTTP/2 and, over plain `http://`, first sends an
-"upgrade" request. Tomcat doesn't enable that by default, so every call would pay for a refused
-upgrade. Pinning 1.1 is simpler and matches what `curl` sends.
+**Why HTTP/1.1:** the JDK client defaults to HTTP/2. Over plain `http://` it sends ordinary HTTP/1.1
+requests carrying `Upgrade: h2c` headers, asking the server to switch. Tomcat doesn't enable h2c by
+default, so it ignores the headers and answers in 1.1; nothing breaks. Pinning 1.1 keeps the
+requests plain and predictable, like `curl`'s.
 
 **Kotlin/Jackson: `jacksonObjectMapper()`.** From `jackson-module-kotlin` (the app already depends on
 it): a Jackson 3 `JsonMapper` that understands Kotlin data classes, so `InventoryItem` can be read
@@ -71,8 +72,13 @@ function (see the concepts index). The type to parse into comes from where the r
 `Purchased(...)` needs an `InventoryItem`, so that's what's read. In `quantityOf`, nothing tells the
 compiler the type, so it's written out: `readValue<InventoryItem>(...)`.
 
-**Kotlin: `when` without a subject** (first seen in the service): the first true branch wins, and
-`else` is required.
+**Kotlin: `when` without a subject** (first seen in
+[InventoryRepository.kt](../../main/inventory/InventoryRepository.kt.md#choosing-the-outcome-a-when-without-a-subject)):
+the first true branch wins, and `else` is required.
+
+**Kotlin: `error(...)`.** Throws an `IllegalStateException` with the message (see
+[InventoryConcurrencyTest.kt](../inventory/InventoryConcurrencyTest.kt.md#restocks-mixed-with-purchases)).
+Inside `race` it becomes a failed `Result`, so an unexpected answer shows up in the failures list.
 
 ### `receive`, `quantityOf`, `inventory`
 
@@ -89,8 +95,36 @@ fun receive(skuId: String, quantity: Int): InventoryItem {
 condition is false. It's the sibling of `require` (`IllegalArgumentException`, "you called me
 wrong"): `check` means "the state I found is wrong", here an unexpected response.
 
-`quantityOf` returns `Int?` (`null` on a 404), mirroring the `quantityOf` helpers that the
-repository-level tests run against the database.
+```kotlin
+/** `GET /inventory/{skuId}`: the SKU's stock, or `null` on a 404. */
+fun quantityOf(skuId: String): Int? {
+    val response = http.send(request("/inventory/$skuId").GET().build(), HttpResponse.BodyHandlers.ofString())
+    return when (response.statusCode()) {
+        200 -> json.readValue<InventoryItem>(response.body()).quantity
+        404 -> null
+        else -> error("get $skuId: ${response.statusCode()} ${response.body()}")
+    }
+}
+
+/** `GET /inventory`: every SKU, in the order the app returns them. */
+fun inventory(): List<InventoryItem> {
+    val response = http.send(request("/inventory").GET().build(), HttpResponse.BodyHandlers.ofString())
+    check(response.statusCode() == 200) { "list: ${response.statusCode()} ${response.body()}" }
+    return json.readValue(response.body())
+}
+```
+
+**Kotlin: `Int?` as "maybe absent".** `quantityOf` returns `null` for a 404, mirroring the
+`quantityOf` helpers the repository-level tests run against the database, so callers write
+`assertEquals(0, client.quantityOf("widget"))` the same way.
+
+**Kotlin: `when` with a subject.** `when (response.statusCode()) { 200 -> ...; 404 -> ... }` compares
+the value against each branch, like Java's `switch`. Here the status alone decides, unlike in
+`purchase`, where a 400 also needs its body checked.
+
+**Jackson: reading a list.** In `inventory()`, the return type `List<InventoryItem>` tells
+`readValue` what to build, generic element type included. That works because `readValue` is
+reified: the full type survives to runtime, which Java's `readValue(json, List.class)` can't do.
 
 ### The request helpers
 

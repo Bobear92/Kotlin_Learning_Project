@@ -6,8 +6,9 @@
 
 Shared test helper for the oversell test plan in [TODO.md](../../../../../.claude/TODO.md). It
 starts N threads at the same moment and collects every thread's outcome. Used by
-[InventoryConcurrencyTest.kt](../inventory/InventoryConcurrencyTest.kt.md) and
-[NegativeControlTest.kt](../inventory/NegativeControlTest.kt.md), and later by the HTTP races.
+[InventoryConcurrencyTest.kt](../inventory/InventoryConcurrencyTest.kt.md),
+[NegativeControlTest.kt](../inventory/NegativeControlTest.kt.md) and
+[MultiInstanceRaceTest.kt](../inventory/MultiInstanceRaceTest.kt.md).
 It began as a private function inside `InventoryConcurrencyTest` and moved here on 2026-09-30.
 
 ## Walkthrough

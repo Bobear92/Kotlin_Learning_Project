@@ -36,6 +36,23 @@ picks its own pause.
 **Why 12 buyers for 10 units:** it's the scenario from the purchase walkthrough's last question.
 There are more buyers than units, so a correct purchase must refuse two of them.
 
+### A fresh `widget` for every test
+
+```kotlin
+/** Every test starts with one SKU, `widget`, holding [stock] units. */
+@BeforeEach
+fun seedWidget() {
+    jdbcClient.sql("DELETE FROM inventory").update()
+    jdbcClient.sql("INSERT INTO inventory (sku_id, quantity) VALUES ('widget', ?)").param(stock).update()
+}
+```
+
+With no test transaction, each test cleans up at the start. `?` is a *positional* parameter, and
+`.param(stock)` fills it; the real repository uses named ones (`:skuId`). The private `quantityOf`
+helper below it is the same one as in
+[InventoryConcurrencyTest.kt](InventoryConcurrencyTest.kt.md#the-new-sku-creation-race): a
+`SELECT` straight from the database, with `singleOrNull()` giving `null` for a missing row.
+
 ### Control 1: the naive code works without a race
 
 ```kotlin
@@ -98,8 +115,8 @@ check and all twelve write `9`. The test is deterministic, so it can't flake.
 
 - No errors: the naive code raises nothing, and the database's `CHECK (quantity >= 0)` never
   fires, because every value written (`9`) is valid on its own.
-- The oversell check fails, and its **first** assertion ("oversold: 12 purchases succeeded for a
-  stock of 10") is the one that trips.
+- The oversell check fails on its `oversold` assertion ("oversold: 12 purchases succeeded for a
+  stock of 10"), the first invariant check after the "SKU exists" sanity check.
 
 **Kotlin: `assertFailsWith<T> { }`.** Runs the block and passes only if it throws a `T`; it returns
 the exception so you can inspect it. JUnit's Java equivalent is

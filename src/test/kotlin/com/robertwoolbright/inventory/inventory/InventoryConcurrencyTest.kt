@@ -70,7 +70,7 @@ class InventoryConcurrencyTest @Autowired constructor(
     }
 
     // Why: assertNoOversell also checks the "remaining" values, proving each unit was sold exactly
-    // once; NegativeControlTest shows it catches two buyers who both read 10 and both wrote 9.
+    // once; NegativeControlTest shows the same check catching a read-then-write purchase.
     /**
      * Same-SKU purchase race: with stock S and N > S buyers of 1, exactly S succeed, N - S are refused
      * as insufficient stock, and the SKU ends at 0, never negative.

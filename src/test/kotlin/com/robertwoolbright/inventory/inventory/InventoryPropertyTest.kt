@@ -74,12 +74,12 @@ class InventoryPropertyTest @Autowired constructor(
         Arb.bind(skuIds, Arb.int(1..15)) { skuId, quantity -> Operation.Purchase(skuId, quantity) },
     )
 
+    // Why: a block body, not `= runBlocking { ... }`. That form would return checkAll's result, and
+    // JUnit doesn't run @Test methods that don't return Unit (at most a discovery warning Gradle hides).
     /**
      * For any sequence of up to 30 operations, the repository and the model agree after every step,
      * and stock never goes negative.
      */
-    // Why: a block body, not `= runBlocking { ... }`. That form would return checkAll's result, and
-    // JUnit silently skips @Test methods that don't return Unit.
     @Test
     fun `the repository behaves like the in-memory model for any sequence of operations`() {
         runBlocking {

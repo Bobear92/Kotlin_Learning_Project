@@ -50,6 +50,33 @@ Kotlin exactly as written in Java (compare `SimpleResponse.Builder` below).
 declared. JUnit makes a new instance of the test class per test, so they're rebuilt for each test.
 Parsing a tiny YAML costs milliseconds, so that's fine.
 
+### Test data and a POST helper
+
+```kotlin
+/** Starts every test from an empty table, since all tests in this context share one database. */
+@BeforeEach
+fun clearInventory() {
+    jdbcClient.sql("DELETE FROM inventory").update()
+}
+
+private fun insert(skuId: String, quantity: Int) {
+    jdbcClient.sql("INSERT INTO inventory (sku_id, quantity) VALUES (?, ?)")
+        .params(skuId, quantity)
+        .update()
+}
+
+private fun post(path: String, body: String): ResultActionsDsl =
+    mockMvc.post(path) {
+        contentType = MediaType.APPLICATION_JSON
+        content = body
+    }
+```
+
+The same helpers as in [InventoryControllerTest.kt](InventoryControllerTest.kt.md#helpers-for-post):
+a clean table per test (`@SpringBootTest` has no rollback), rows inserted straight into the
+database (`.params(...)` fills the positional `?`s in order), and the MockMvc Kotlin DSL's
+`post(path) { ... }`, whose block sets the request's content type and body.
+
 ### One test per declared response
 
 ```kotlin
@@ -104,6 +131,24 @@ hand (`SimpleResponse`, no app involved): one correct item as a control, then si
 | a 200 as `text/plain` | `...contentType.notAllowed` |
 | a 404 as `application/json` | `...contentType.notAllowed` |
 | a `500` | `...status.unknown` (the YAML lists no 500; Spring's default 415 would fail the same way) |
+
+```kotlin
+private fun jsonItem(body: String): SimpleResponse =
+    SimpleResponse.Builder.ok().withContentType("application/json").withBody(body).build()
+...
+/** Strict schema: a missing field is an error (the YAML alone would allow it). */
+@Test
+fun `the validator rejects an item with a missing field`() {
+    assertRejected("validation.response.body.schema.required", jsonItem("""{"skuId": "widget"}"""))
+}
+```
+
+**The library: `SimpleResponse` and `validateResponse`.** `SimpleResponse` is the library's own
+response object, built with a Java builder (`ok()` sets 200). `validator.validateResponse(path,
+method, response)` checks it as if the app had answered `GET /inventory/widget` with it, and returns
+a `ValidationReport`: `report.messages` lists what's wrong (each with a `key` and a text), and
+`report.hasErrors()` is true if any message is at error level. The control test asserts
+`hasErrors()` is false; the others use `assertRejected`.
 
 **Why the exact key:** a first version only asserted `report.hasErrors()`. That passes for *any*
 error, including the wrong one. Asserting the key ties each test to the one rule it's about.

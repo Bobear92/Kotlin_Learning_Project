@@ -60,6 +60,32 @@ the apps can only be created in `@BeforeAll`. Reading one before it's assigned t
 so `@AfterAll` doesn't fail when startup crashed halfway. `lateinit` only works with `var` and
 non-primitive types.
 
+```kotlin
+        instanceA = InventoryHttpClient(baseUrl(appA))
+        instanceB = InventoryHttpClient(baseUrl(appB))
+        instances = listOf(instanceA, instanceB)
+        jdbcClient = appA.getBean(JdbcClient::class.java)
+    }
+
+    /** Stops both apps before the database they depend on. */
+    @AfterAll
+    @JvmStatic
+    fun stopInstances() {
+        if (::appA.isInitialized) appA.close()
+        if (::appB.isInitialized) appB.close()
+        postgres.stop()
+    }
+```
+
+**Spring: `getBean`.** With `@SpringBootTest`, beans arrive through the constructor. Here there's no
+test context to inject from, so the test asks app A's context for its `JdbcClient` directly. It's
+used only for the `@BeforeEach` cleanup (`DELETE FROM inventory`); since both apps share the
+database, emptying it through A empties it for B too. Fetching beans by hand is normal in test
+setup and `main`-style code, and a smell inside application code, where injection is the rule.
+
+**Why this order:** apps first, then the database. Closing a context shuts down its connection pool
+cleanly; stopping Postgres first would make both pools log connection errors on the way out.
+
 **Testcontainers:** here the container is started and stopped by hand instead of through
 `@ServiceConnection` ([TestcontainersConfiguration.kt](../support/TestcontainersConfiguration.kt.md)),
 because its connection details go to two apps, not one test context.
@@ -120,9 +146,29 @@ point: the guarantee is identical with one app or two. `i % 2` sends even buyers
 to B. The stock is seeded through A and read back through B, which also shows both apps really
 share one database.
 
+```kotlin
+// Why: restocks go only to A and purchases only to B, so every interleaving of the two apps'
+// writes to the one row is exercised. Demand (30 x 5 = 150) exceeds supply (20 + 30 x 3 = 110).
+...
+    val results = race(threads) { i ->
+        if (i % 2 == 0) {
+            instanceA.receive("widget", 3)
+            3
+        } else {
+            when (instanceB.purchase("widget", 5)) {
+                is PurchaseResult.Purchased -> -5
+                PurchaseResult.InsufficientStock -> 0
+                PurchaseResult.SkuNotFound -> error("an existing SKU was reported missing")
+            }
+        }
+    }
+```
+
 The second test sends every restock to A and every purchase to B, so the two apps' writes to the
 same row interleave, and checks the exact balance like the mixed race in
-[InventoryConcurrencyTest.kt](InventoryConcurrencyTest.kt.md).
+[InventoryConcurrencyTest.kt](InventoryConcurrencyTest.kt.md#restocks-mixed-with-purchases): each
+thread returns its change to the stock, and the final quantity must be the initial one plus their
+sum. `receive` throws on anything but a 200, so a failed restock can't be silently counted.
 
 **What would fail here but pass in `InventoryConcurrencyTest`:** a fix done in Kotlin, such as a
 `synchronized` block or a per-SKU lock around a read-then-write purchase. That lock only exists in

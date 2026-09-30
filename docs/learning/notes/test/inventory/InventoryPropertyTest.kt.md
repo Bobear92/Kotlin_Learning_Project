@@ -136,7 +136,8 @@ rarely be refused. The ranges are tuned so every `PurchaseResult` case shows up 
 
 ```kotlin
 // Why: a block body, not `= runBlocking { ... }`. That form would return checkAll's result, and
-// JUnit silently skips @Test methods that don't return Unit.
+// JUnit doesn't run @Test methods that don't return Unit (at most a discovery warning Gradle hides).
+...
 @Test
 fun `the repository behaves like the in-memory model for any sequence of operations`() {
     runBlocking {
@@ -168,8 +169,8 @@ fun `the repository behaves like the in-memory model for any sequence of operati
 ```
 
 **Kotest: `checkAll`.** Runs the block 200 times, each time with a fresh random list. If the block
-throws (a failed `assertEquals`), the property fails. The block is an ordinary lambda; the
-`kotlin.test` assertions work inside it.
+throws (a failed `assertEquals`), the property fails. The block is a *suspend* lambda (it may call
+other `suspend` functions); ordinary `kotlin.test` assertions still work inside it.
 
 **Kotlin: `suspend` and `runBlocking` (a first look at coroutines).** `checkAll` is a `suspend`
 function: one that can pause and resume without holding a thread (Kotlin's coroutines). A
@@ -181,7 +182,8 @@ finishes, so ordinary code, like a JUnit test, can call `suspend` code. It's fin
 **JUnit: why the block body (found 2026-09-30).** The first version was
 `fun test() = runBlocking { checkAll(...) }`. With `=`, the function's return type is whatever
 `runBlocking` returns, here `checkAll`'s result object, not `Unit`. JUnit only runs `@Test`
-methods that return `void`, and **silently skips** the rest. Gradle reported "No tests found".
+methods that return `void`. It doesn't run the others; since JUnit 5.13 it at most logs a discovery
+warning, which Gradle doesn't show. All Gradle said was "No tests found".
 Compare the `= { }` pitfall in [NaiveInventoryRepository.kt](NaiveInventoryRepository.kt.md):
 another case where `=` changes more than it seems.
 

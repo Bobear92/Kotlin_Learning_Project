@@ -609,7 +609,9 @@ create a SKU. A buggy upsert-style purchase would.
 ```kotlin
 @ParameterizedTest(name = "quantity {0}")
 @ValueSource(ints = [0, -5])
-fun `POST purchase rejects a quantity below 1`(quantity: Int) { ... }
+fun `POST purchase rejects a quantity below 1`(quantity: Int) {
+...
+}
 
 // Why: Spring validates the body before the controller runs, so an invalid request is a 400
 // even when the SKU is also missing (decided with Robert, 2026-09-29).
