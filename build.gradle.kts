@@ -42,6 +42,8 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-postgresql")
     // Checks MockMvc responses against inventory.yaml (the contract-validation test).
     testImplementation("com.atlassian.oai:openapi-request-validator-mockmvc:3.0.0")
+    // Property-based testing (generators + checkAll) inside ordinary JUnit tests; not Kotest's runner.
+    testImplementation("io.kotest:kotest-property:6.2.5")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

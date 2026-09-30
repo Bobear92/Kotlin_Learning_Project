@@ -145,12 +145,15 @@ Flyway, JDBC and Web MVC each have their own starter and test starter.
     testImplementation("org.testcontainers:testcontainers-postgresql")
     // Checks MockMvc responses against inventory.yaml (the contract-validation test).
     testImplementation("com.atlassian.oai:openapi-request-validator-mockmvc:3.0.0")
+    // Property-based testing (generators + checkAll) inside ordinary JUnit tests; not Kotest's runner.
+    testImplementation("io.kotest:kotest-property:6.2.5")
 ```
 
 **Gradle: an explicit version.** Most dependencies here have no version because Spring Boot's BOM
 supplies one. The Atlassian validator isn't in that BOM, so its version is written into the
 coordinate (`group:artifact:version`). Chosen 2026-09-30: it reads the YAML itself, so the test
-can't drift from the contract, and it plugs into MockMvc as a `ResultMatcher`.
+can't drift from the contract, and it plugs into MockMvc as a `ResultMatcher`. Kotest's
+property module (also 2026-09-30) is the same story: not in the BOM, so it's pinned here.
 
 | Dependency | What it gives us |
 | --- | --- |
@@ -159,6 +162,7 @@ can't drift from the contract, and it plugs into MockMvc as a `ResultMatcher`.
 | `kotlin-test-junit5` | `kotlin.test` assertions (`assertEquals`, `assertFailsWith`) backed by JUnit Jupiter. The artifact keeps its old `junit5` name, but it runs fine on JUnit 6. |
 | `testcontainers-junit-jupiter`, `testcontainers-postgresql` | Start a real Postgres in Docker for tests. |
 | `openapi-request-validator-mockmvc` (Atlassian, `3.0.0`) | Checks MockMvc responses against `inventory.yaml` in [InventoryContractTest.kt](test/inventory/InventoryContractTest.kt.md). Not managed by Spring Boot's BOM, so it carries an explicit version. Formerly `swagger-request-validator-mockmvc`; 3.0 is built for Spring 7 and Java 21. It brings Jackson 2 along (`com.fasterxml.jackson`), which lives in different packages from the app's Jackson 3 (`tools.jackson`), so the two don't clash. |
+| `kotest-property` (`6.2.5`) | Generators (`Arb`) and `checkAll` for [InventoryPropertyTest.kt](test/inventory/InventoryPropertyTest.kt.md). Only the property module: the tests stay JUnit tests, run by the usual engine, instead of Kotest specs with Kotest's own runner. Chosen over jqwik (Java-first, in maintenance mode). |
 | `junit-platform-launcher` | Gradle 9 no longer bundles the JUnit Platform launcher; it has to be on the test runtime classpath. |
 
 **Why:** tests run against real Postgres instead of H2, an in-memory database that imitates

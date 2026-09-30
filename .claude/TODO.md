@@ -105,7 +105,7 @@ class of bug. Each item below is also a teaching topic for a walkthrough.
       tagged `load`, run by a separate `./gradlew loadTest`; property tests = Kotest property. Done: `race()`
       moved to `support/Race.kt`, shared `assertNoOversell` in `OversellAssertions.kt`, `NegativeControlTest` written.
       Done: Robert's `NaiveInventoryRepository`; both negative-control tests green, full suite 100/100 (2026-09-30).
-      Contract-validation test done (2026-09-30). Next: property-based test (Kotest property).
+      Contract-validation test done (2026-09-30). Property-based test done (2026-09-30). Next: multi-instance race.
 
 ### Database backstop
 - [x] Test that the `CHECK (quantity >= 0)` constraint rejects a direct update that would go
@@ -119,6 +119,7 @@ class of bug. Each item below is also a teaching topic for a walkthrough.
       concurrent purchases on hot SKUs, then check the final quantities with `GET /inventory`.
 
 ### Model-based (stretch)
-- [ ] Property-based test (e.g. Kotest property testing): random sequences of receive and
+- [x] Property-based test (e.g. Kotest property testing): random sequences of receive and
       purchase operations checked against a simple in-memory model. The invariant must hold
-      after every sequence.
+      after every sequence. (`InventoryPropertyTest`, Kotest property 6.2.5, 200 sequences of up to 30
+      operations, compared after every step; a deliberately broken model was caught and shrunk to 2 steps, 2026-09-30)
