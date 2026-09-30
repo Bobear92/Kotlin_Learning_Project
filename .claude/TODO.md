@@ -61,12 +61,20 @@ and checks items off as they are done. Newest decisions are recorded in the READ
       2026-09-29 (new: `PurchaseResult`, `InsufficientInventoryException`); purchase decisions recorded in the README
       ("Contract gaps (purchase)"). Walkthrough done 2026-09-29. Shipped: PR #6 (e4f2aad, 2026-09-29)
 - [x] `/walkthrough` of `POST /inventory/{skuId}/purchase` (2026-09-29; three new interview-prep questions)
-- [ ] Contract-validation test: check MockMvc responses against inventory.yaml (decided with the
-      Controllers decision; all four endpoints now exist, so it's ready to do)
+- [x] Contract-validation test: check MockMvc responses against inventory.yaml. `InventoryContractTest` (17 tests:
+      every status of all four endpoints + 7 validator self-checks), Atlassian `openapi-request-validator-mockmvc:3.0.0`,
+      `InventoryItem` fields required (strict, Robert, 2026-09-30); README "Contract validation" row (2026-09-30)
 - [ ] Decide on demo seed data for a running app (`POST /inventory/{skuId}` now exists)
 - [x] Error handling: `text/plain` 400/404 bodies exactly as the contract specifies
       (404 for missing SKU done 2026-09-27 via `InventoryExceptionHandler`; POST's four 400s done 2026-09-28; purchase's 400/404 done 2026-09-29)
-- [ ] Decide whether error responses should declare `charset=UTF-8`: today `Content-Type: text/plain` has no charset while the body is UTF-8 (seen with `curl` on 2026-09-27; only matters for non-ASCII SKUs)
+- [ ] Decide whether error responses should declare `charset=UTF-8` (the contract validator accepts `text/plain;charset=UTF-8`, checked 2026-09-30): today `Content-Type: text/plain` has no charset while the body is UTF-8 (seen with `curl` on 2026-09-27; only matters for non-ASCII SKUs)
+
+## Working notes
+
+- 2026-09-30, branch `test/oversell-hardening`: one testing `/feature` covering every open test-plan item
+  plus the contract-validation test. Decided (Robert): test-only naive repository, load test as JUnit +
+  `HttpClient` in a separate `./gradlew loadTest`, Kotest property for property tests. All parts done
+  (suite 124/124 + `loadTest`); README test claims match. Next: walkthrough, then `/ship`.
 
 ## Oversell protection: test plan
 
@@ -93,11 +101,14 @@ class of bug. Each item below is also a teaching topic for a walkthrough.
 - [x] **New-SKU creation race.** Concurrent first-time `POST`s for a SKU that doesn't exist yet.
       All succeed, no duplicate-key errors, final = sum of all quantities.
       (`InventoryConcurrencyTest`, plus a lost-update race on an existing SKU; green with `addStock`, 2026-09-28)
-- [ ] **Repeat to flush out flakiness.** Run the race tests many times (`@RepeatedTest`), since
+- [x] **Repeat to flush out flakiness.** Run the race tests many times (`@RepeatedTest`), since
       concurrency bugs are intermittent. (all five races use `@RepeatedTest(5)`, 2026-09-29; raise the count
-      or add a stress profile if "many times" should mean more)
-- [ ] **Negative control.** Temporarily swap in a naive read-then-write implementation and show
-      the race test *fails*. This proves the test can actually detect an oversell.
+      or add a stress profile if "many times" should mean more. Decided 2026-09-30: keep 5 in the normal build;
+      the `loadTest` task supplies the volume)
+- [x] **Negative control.** Show that the race check fails on a naive read-then-write purchase,
+      proving the test can actually detect an oversell. Done 2026-09-30: a permanent, test-only
+      `NaiveInventoryRepository` (Robert) runs through the shared `race()` and `assertNoOversell`;
+      a `CyclicBarrier` forces the lost update on every run (`NegativeControlTest`).
 
 ### Database backstop
 - [x] Test that the `CHECK (quantity >= 0)` constraint rejects a direct update that would go
@@ -105,12 +116,19 @@ class of bug. Each item below is also a teaching topic for a walkthrough.
       (`database rejects an update that would make quantity negative` in `InventoryRepositoryTest`; green since V1)
 
 ### Across instances and under load
-- [ ] **Multiple app instances.** Two app instances (or two Spring contexts) against the same
+- [x] **Multiple app instances.** Two app instances (or two Spring contexts) against the same
       Postgres, running the purchase race. Correctness must hold because the database enforces it.
-- [ ] **HTTP load test.** Gatling (it has a Kotlin DSL) or k6 against the running app: sustained
+      (`MultiInstanceRaceTest`: two `SpringApplicationBuilder` apps on random ports, one Testcontainers Postgres,
+      buyers split over real HTTP via `support/InventoryHttpClient`; purchase race + cross-instance restock/purchase
+      balance, `@RepeatedTest(3)`, green 2026-09-30)
+- [x] **HTTP load test.** Gatling (it has a Kotlin DSL) or k6 against the running app: sustained
       concurrent purchases on hot SKUs, then check the final quantities with `GET /inventory`.
+      (Chosen instead: JUnit + JDK `HttpClient` on virtual threads, `InventoryLoadTest` tagged `load`, run by
+      `./gradlew loadTest`, excluded from `./gradlew test`; 50 clients x 20 s on 3 hot SKUs, exact per-SKU balance,
+      prints throughput and p50/p95/p99. 5 s run: ~2,400 req/s, green 2026-09-30)
 
 ### Model-based (stretch)
-- [ ] Property-based test (e.g. Kotest property testing): random sequences of receive and
+- [x] Property-based test (e.g. Kotest property testing): random sequences of receive and
       purchase operations checked against a simple in-memory model. The invariant must hold
-      after every sequence.
+      after every sequence. (`InventoryPropertyTest`, Kotest property 6.2.5, 200 sequences of up to 30
+      operations, compared after every step; a deliberately broken model was caught and shrunk to 2 steps, 2026-09-30)

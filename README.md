@@ -64,6 +64,7 @@ Each decision and its reasoning is recorded here once it is made.
 | Demo seed data | Tests insert their own rows. Whether a running app should start with sample data (e.g. a dev-only Flyway location) is decided once `POST /inventory/{skuId}` exists. | Open |
 | Contract gaps (POST) | Settled for `POST /inventory/{skuId}` by Robert on 2026-09-28. **SKU ids: exact, case-sensitive match** (`W` and `w` are two SKUs; the contract sets no format, and normalizing would silently change the id a client sent). **Strict JSON:** malformed, empty or `null` bodies, a missing or `null` `quantity`, a string (`"5"`), a decimal (`1.5`) or a number too big for `Int` are all `400` `Invalid request body` (Jackson's lenient defaults would coerce `"5"` and truncate `1.5`). `quantity < 1`: `400` `quantity must be at least 1`, checked with Bean Validation in the controller layer (considered a manual check in the service). The service also has `require(quantity >= 1)` for callers that bypass HTTP; hitting it is our bug, so it's a `500`, not a `400` (added in review, 2026-09-28). **Wrong `Content-Type`:** `400` `Content-Type must be application/json` instead of Spring's `415`, which the contract doesn't list. **Overflow:** a total past `Int.MAX_VALUE` is `400` `Quantity would exceed the maximum stock`, refused atomically inside the upsert's SQL (considered leaving Postgres's `integer out of range` as a `500`). All `400` bodies are `text/plain`. | Decided 2026-09-28 |
 | Contract gaps (purchase) | Settled for `POST /inventory/{skuId}/purchase` by Robert on 2026-09-29. **One SQL statement decides the outcome:** a data-modifying CTE (`WITH purchased AS (UPDATE ... WHERE quantity >= ? RETURNING quantity) SELECT remaining, EXISTS(...)`) deducts the stock and reports whether the SKU exists, and the repository returns a sealed `PurchaseResult` (`Purchased`, `SkuNotFound`, `InsufficientStock`). Considered an `UPDATE` followed by a lookup when it changed nothing (the SKU can change between the two statements) and `SELECT ... FOR UPDATE` in a transaction (correct, but holds the row lock for three round trips). **Insufficient stock:** `400` `Insufficient inventory for <skuId>`, no partial fill, stock unchanged. A sold-out SKU (quantity `0`) is insufficient stock, not a missing SKU. **Missing SKU:** `404` `SKU not found: <skuId>`, the same body as `GET /inventory/{skuId}`; a purchase never creates a SKU. **Invalid body:** the same four `400`s as `POST /inventory/{skuId}` (same `InventoryQuantity` schema). The body is validated before the SKU is looked up, so an invalid body for a missing SKU is a `400`, not a `404`. The service's `require(quantity >= 1)` also blocks direct callers, since a negative purchase would add stock. | Decided 2026-09-29 |
+| Contract validation | `InventoryContractTest` checks every status of every endpoint against `inventory.yaml` with Atlassian's `openapi-request-validator-mockmvc` (declared status, content type, body schema). **`InventoryItem` is checked strictly** (Robert, 2026-09-30): the YAML marks neither field `required`, so a literal check would accept `{}`; the test requires both `skuId` and `quantity`, in memory, without changing the YAML. Extra fields are rejected by the validator's default. Requests that are invalid on purpose (the `quantity < 1` 400s) are checked for their response only. Self-checks prove the validator rejects a missing field, an extra field, a negative quantity, JSON errors, text/plain items and undeclared statuses such as `500`. | Decided 2026-09-30 |
 
 ### Decision record: PostgreSQL and atomic SQL
 
@@ -102,9 +103,19 @@ Kotlin doesn't favor any particular database; it uses the same JDBC drivers as J
 favor data-access libraries that work with immutable `data class`es (`JdbcClient`, Spring Data
 JDBC, Exposed) over JPA, which needs compiler plugins to work around Kotlin's final-by-default classes.
 
-The oversell guarantee is tested with several different mechanisms: race tests, a negative
-control, multi-instance tests, load tests and property-based tests. The full plan is in
-[.claude/TODO.md](.claude/TODO.md#oversell-protection-test-plan).
+The oversell guarantee is tested with several different mechanisms, each catching a different
+class of bug (the full plan is in [.claude/TODO.md](.claude/TODO.md#oversell-protection-test-plan)):
+
+| Test | What it proves |
+| --- | --- |
+| `InventoryConcurrencyTest` | Race tests: 50–60 threads released at once on one SKU (same-size buys, uneven sizes, restocks mixed with purchases, first-time creates). No oversell, no lost update. |
+| `NegativeControlTest` | The race check can fail: a test-only read-then-write purchase passes it when buyers take turns and is caught when they race. |
+| `MultiInstanceRaceTest` | Two complete app instances on one Postgres, buyers split across both over real HTTP. The guarantee lives in the database, not in either JVM. |
+| `InventoryPropertyTest` | Kotest property test: 200 random sequences of receives and purchases agree with an in-memory model after every step. |
+| `InventoryLoadTest` | 50 HTTP clients on three hot SKUs for 20 s, stock kept near zero; the books balance exactly per SKU. Run with `./gradlew loadTest`. |
+| `InventoryRepositoryTest` | The `CHECK (quantity >= 0)` backstop rejects a direct write that would go negative. |
+
+`InventoryContractTest` separately checks every response of every endpoint against `inventory.yaml`.
 
 ## Build and run
 
@@ -113,7 +124,8 @@ container; there is nothing to install or configure by hand.
 
 ```sh
 ./gradlew bootRun   # start the API on http://localhost:8080 (Windows PowerShell: .\gradlew.bat bootRun)
-./gradlew test      # run all tests, each against a throwaway Postgres container
+./gradlew test      # run all tests except the load test, each against a throwaway Postgres container
+./gradlew loadTest  # HTTP load test, 20 s (options: -Dload.seconds=60 -Dload.clients=100)
 ./gradlew build     # compile, test and package build/libs/inventory-0.0.1-SNAPSHOT.jar
 ```
 
@@ -156,8 +168,9 @@ src/main/
     db/migration/             Flyway SQL migrations (V1__..., V2__...)
     openapi/inventory.yaml    The OpenAPI contract (source of truth)
 src/test/kotlin/com/robertwoolbright/inventory/
-  inventory/                  Feature tests: repository, service, controller, concurrency races
-  support/                    Shared test setup (the Testcontainers Postgres)
+  inventory/                  Feature tests: repository, service, controller, contract, races,
+                              negative control, multi-instance, property-based, load
+  support/                    Shared test setup (Testcontainers Postgres, race helper, HTTP client)
 .claude/                 Claude Code configuration (hooks, agents, skills) — see below
 CLAUDE.md                Project memory and coding standards for Claude Code
 docs/

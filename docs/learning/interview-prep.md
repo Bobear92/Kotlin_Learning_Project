@@ -640,3 +640,35 @@ there". That's why the first test inserts `gadget` as a **decoy**. The function 
 
 Notes: [InventoryRepositoryTest.kt](notes/test/inventory/InventoryRepositoryTest.kt.md)
 </details>
+
+### How do you know your race tests would actually catch an oversell?
+
+<details>
+<summary>Answer</summary>
+
+A **negative control**: `NegativeControlTest` runs a deliberately naive purchase
+(`NaiveInventoryRepository`: read the stock, check it in Kotlin, write an absolute value) through
+the same `race()` and the same `assertNoOversell` that guard the real repository.
+
+- When buyers take turns, the naive code passes the check. So it isn't simply buggy.
+- When they race, a `CyclicBarrier` holds every buyer between its read and its write. All 12 read
+  10 and all write 9: twelve sales from ten units, the stock ends at 9, and no error is raised
+  (9 passes `CHECK (quantity >= 0)`). The check fails on its `oversold` assertion, and the test
+  asserts it failed for that reason.
+
+Because the check is **shared**, this proves the exact assertions on the real code can detect a
+lost update. See [NegativeControlTest notes](notes/test/inventory/NegativeControlTest.kt.md).
+</details>
+
+### Why does the purchase stay correct with several app instances?
+
+<details>
+<summary>Answer</summary>
+
+The guarantee lives in Postgres, not in the app: one `UPDATE ... SET quantity = quantity - :q
+WHERE quantity >= :q` takes a row lock, so a second buyer waits and re-checks against the new value.
+A Kotlin-side fix (a `synchronized` block or a per-SKU lock around read-then-write) would pass the
+single-app race tests but fail with two instances, because each JVM has its own lock.
+`MultiInstanceRaceTest` starts two full app contexts on one database and races buyers across both
+over HTTP to prove it. See [MultiInstanceRaceTest notes](notes/test/inventory/MultiInstanceRaceTest.kt.md).
+</details>
