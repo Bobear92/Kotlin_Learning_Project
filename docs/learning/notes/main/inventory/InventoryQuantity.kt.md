@@ -31,7 +31,7 @@ Hibernate Validator, the engine that runs the checks (see
 ### The class
 
 ```kotlin
-/** One inventory quantity; used as the request body for POST /inventory/{skuId}. */
+/** One inventory quantity; used as the request body for POST /inventory/{skuId} and paths./inventory/{skuId}/purchase.post. */
 data class InventoryQuantity(
     // Contract: quantity has minimum: 1 in inventory.yaml.
     @Min(1, message = "quantity must be at least 1") val quantity: Int

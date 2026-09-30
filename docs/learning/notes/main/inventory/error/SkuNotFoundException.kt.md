@@ -1,6 +1,6 @@
 # SkuNotFoundException.kt
 
-> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/error/SkuNotFoundException.kt](../../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/error/SkuNotFoundException.kt) · Last synced with code: 2026-09-27
+> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/error/SkuNotFoundException.kt](../../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/error/SkuNotFoundException.kt) · Last synced with code: 2026-09-29
 
 ## Role
 
@@ -32,7 +32,7 @@ parent `inventory` package must import this class, as the [service does](../Inve
 ### The whole class in one line
 
 ```kotlin
-/** Thrown when the database is queried with the SKU, but the result comes back as null. This is thrown at the service level and is mapped to a 404 by InventoryExceptionHandler. */
+/** Thrown when the database is queried with the SKU, but the result comes back as null. And thrown during the purchase flow on PurchaseResult.SkuNotFound. This is thrown at the service level and is mapped to a 404 by InventoryExceptionHandler. */
 class SkuNotFoundException(skuId: String) : RuntimeException("SKU not found: $skuId")
 ```
 

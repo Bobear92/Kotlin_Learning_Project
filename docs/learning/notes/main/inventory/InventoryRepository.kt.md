@@ -520,7 +520,7 @@ happen: an upsert touches exactly one `sku_id`.
  * Returns [PurchaseResult.Purchased] with the remaining stock if successful, [PurchaseResult.InsufficientStock] if there is not enough quantity, [PurchaseResult.SkuNotFound] if the skuId doesn't exist.
  */
 fun removeStock(skuId: String, quantity: Int): PurchaseResult = jdbcClient.sql(
-    // Why: One statement instead of two (update, then select), so another request can't change the stock between them (a race condition)
+    // Why: One statement instead of 2 (update then select) so we don't deal with between the two statements another request changing the stock. A race condition.
 ```
 
 **Kotlin (the return type):** `removeStock` returns a [`PurchaseResult`](PurchaseResult.kt.md), not
@@ -726,6 +726,9 @@ Compare this with the service's `when`, which checks the *type* of a sealed valu
 
 **Why the order matters:** a successful purchase *also* has `sku_exists = true`. If
 `skuExists ->` came first, every successful purchase would be reported as `InsufficientStock`.
+That's worse than a wrong message: the `UPDATE` has already run, so the stock *was* deducted while
+the client is told `400 Insufficient inventory`, and a retry would deduct it again. A `when` stops at
+the first true branch, with no fall-through (unlike a Java `switch` without `break`).
 The branches go from most specific to least: "something was bought" → "the row exists, so there
 wasn't enough" → "no row".
 

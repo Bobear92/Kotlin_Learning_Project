@@ -65,7 +65,7 @@ class InventoryRepository(
      * Returns [PurchaseResult.Purchased] with the remaining stock if successful, [PurchaseResult.InsufficientStock] if there is not enough quantity, [PurchaseResult.SkuNotFound] if the skuId doesn't exist.
      */
     fun removeStock(skuId: String, quantity: Int): PurchaseResult = jdbcClient.sql(
-        // Why: One statement instead of two (update, then select), so another request can't change the stock between them (a race condition)
+        // Why: One statement instead of 2 (update then select) so we don't deal with between the two statements another request changing the stock. A race condition.
         """
             WITH purchased AS (
                 UPDATE inventory SET quantity = quantity - :requested_quantity
