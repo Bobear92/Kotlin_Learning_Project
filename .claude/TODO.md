@@ -105,7 +105,7 @@ class of bug. Each item below is also a teaching topic for a walkthrough.
       tagged `load`, run by a separate `./gradlew loadTest`; property tests = Kotest property. Done: `race()`
       moved to `support/Race.kt`, shared `assertNoOversell` in `OversellAssertions.kt`, `NegativeControlTest` written.
       Done: Robert's `NaiveInventoryRepository`; both negative-control tests green, full suite 100/100 (2026-09-30).
-      Contract-validation test done (2026-09-30). Property-based test done (2026-09-30). Next: multi-instance race.
+      Contract-validation test done (2026-09-30). Property-based test done (2026-09-30). Multi-instance race done (2026-09-30). Next: HTTP load test.
 
 ### Database backstop
 - [x] Test that the `CHECK (quantity >= 0)` constraint rejects a direct update that would go
@@ -113,8 +113,11 @@ class of bug. Each item below is also a teaching topic for a walkthrough.
       (`database rejects an update that would make quantity negative` in `InventoryRepositoryTest`; green since V1)
 
 ### Across instances and under load
-- [ ] **Multiple app instances.** Two app instances (or two Spring contexts) against the same
+- [x] **Multiple app instances.** Two app instances (or two Spring contexts) against the same
       Postgres, running the purchase race. Correctness must hold because the database enforces it.
+      (`MultiInstanceRaceTest`: two `SpringApplicationBuilder` apps on random ports, one Testcontainers Postgres,
+      buyers split over real HTTP via `support/InventoryHttpClient`; purchase race + cross-instance restock/purchase
+      balance, `@RepeatedTest(3)`, green 2026-09-30)
 - [ ] **HTTP load test.** Gatling (it has a Kotlin DSL) or k6 against the running app: sustained
       concurrent purchases on hot SKUs, then check the final quantities with `GET /inventory`.
 

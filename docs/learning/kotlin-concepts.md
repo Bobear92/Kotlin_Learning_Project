@@ -78,6 +78,8 @@ and `/walkthrough` add rows as new concepts come up.
 | `?: return` (Elvis with an early return) | `val x = map[k] ?: return Default`: use the value, or leave the function when it's `null` | [InventoryPropertyTest.kt](notes/test/inventory/InventoryPropertyTest.kt.md) |
 | `mutableMapOf`, `getOrDefault`, `map[k] = v` | Kotlin's mutable map and its index-operator get/set | [InventoryPropertyTest.kt](notes/test/inventory/InventoryPropertyTest.kt.md) |
 | Nested and private classes | A `private sealed interface` / `private class` inside a test class, visible only there | [InventoryPropertyTest.kt](notes/test/inventory/InventoryPropertyTest.kt.md) |
+| `lateinit var` and `::x.isInitialized` | A non-null `var` assigned after construction; reading it early throws; `isInitialized` checks first | [MultiInstanceRaceTest.kt](notes/test/inventory/MultiInstanceRaceTest.kt.md) |
+| `@JvmStatic` | Also emits a real static method for a companion-object function; JUnit's `@BeforeAll`/`@AfterAll` need one | [MultiInstanceRaceTest.kt](notes/test/inventory/MultiInstanceRaceTest.kt.md) |
 | `return` and a line break | A line break after a bare `return` ends the statement; the value has to start on the same line | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md#purchaseinventory-one-branch-per-outcome) |
 
 ## Spring
@@ -126,6 +128,8 @@ and `/walkthrough` add rows as new concepts come up.
 | Contract validation (OpenAPI) | Atlassian's validator checks a MockMvc response's status, content type and body against `inventory.yaml`; plugged in as a `ResultMatcher` via `match(...)` | [InventoryContractTest.kt](notes/test/inventory/InventoryContractTest.kt.md) |
 | Property-based / model-based testing | Generate random inputs (`Arb`), check a rule for all of them (`checkAll`), shrink a failure to the smallest case; compare the real code with a simple model | [InventoryPropertyTest.kt](notes/test/inventory/InventoryPropertyTest.kt.md) |
 | JUnit skips non-`Unit` tests | `fun t() = runBlocking { ... }` returns a value, so JUnit silently ignores it; use a block body | [InventoryPropertyTest.kt](notes/test/inventory/InventoryPropertyTest.kt.md) |
+| Several app instances in one test | `SpringApplicationBuilder(...).properties("server.port=0", ...).run()` twice: two contexts, two Tomcats, one database | [MultiInstanceRaceTest.kt](notes/test/inventory/MultiInstanceRaceTest.kt.md) |
+| JDK `HttpClient` | `java.net.http`: thread-safe client, `HttpRequest` builder, `send(..., BodyHandlers.ofString())`; real HTTP instead of MockMvc | [InventoryHttpClient.kt](notes/test/support/InventoryHttpClient.kt.md) |
 | Request processing order | Routing → `@RequestBody` (Content-Type, then Jackson) → `@Valid` → the handler function; a bad body is a `400` before any database lookup could give a `404` | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md#post-inventoryskuidpurchase) |
 | `@PostMapping` + `@RequestBody` | Map a POST; Jackson reads the JSON body into a class through its primary constructor | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
 | `@Valid` + Bean Validation (`@Min`) | Constraints on a request class run only when the parameter has `@Valid`; failures throw `MethodArgumentNotValidException` | [InventoryQuantity.kt](notes/main/inventory/InventoryQuantity.kt.md) |
