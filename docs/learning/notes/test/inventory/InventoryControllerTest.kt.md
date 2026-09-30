@@ -1,14 +1,14 @@
 # InventoryControllerTest.kt
 
-> Source: [src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryControllerTest.kt](../../../../../src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryControllerTest.kt) · Last synced with code: 2026-09-28
+> Source: [src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryControllerTest.kt](../../../../../src/test/kotlin/com/robertwoolbright/inventory/inventory/InventoryControllerTest.kt) · Last synced with code: 2026-09-29
 
 ## Role
 
-Tests `GET /inventory`, `GET /inventory/{skuId}` and `POST /inventory/{skuId}` through the whole
-stack: MockMvc → controller → service → repository → real Postgres. It checks exactly what the
-contract specifies: the status code, the `Content-Type` and the exact body (JSON on success, plain
-text on `400`/`404`). For `POST` it also reads the table afterwards, so a rejected request is
-proven to have changed nothing.
+Tests `GET /inventory`, `GET /inventory/{skuId}`, `POST /inventory/{skuId}` and
+`POST /inventory/{skuId}/purchase` through the whole stack: MockMvc → controller → service →
+repository → real Postgres. It checks exactly what the contract specifies: the status code, the
+`Content-Type` and the exact body (JSON on success, plain text on `400`/`404`). For both `POST`s
+it also reads the table afterwards, so a rejected request is proven to have changed nothing.
 
 ## Walkthrough
 
@@ -84,6 +84,16 @@ private fun postInventory(
         content = body
     }
 
+private fun postPurchase(
+    skuId: String,
+    body: String,
+    mediaType: MediaType = MediaType.APPLICATION_JSON,
+): ResultActionsDsl =
+    mockMvc.post("/inventory/$skuId/purchase") {
+        contentType = mediaType
+        content = body
+    }
+
 private fun ResultActionsDsl.andExpectBadRequest(message: String) = andExpect {
     status { isBadRequest() }
     content {
@@ -96,7 +106,8 @@ private fun ResultActionsDsl.andExpectBadRequest(message: String) = andExpect {
 **Kotlin: default arguments.** `mediaType: MediaType = MediaType.APPLICATION_JSON` gives the
 parameter a default, so most calls are `postInventory("widget", body)` and only the content-type
 test passes a third argument. Java has no default arguments; you'd write an overload
-`postInventory(skuId, body)` that calls the three-argument one.
+`postInventory(skuId, body)` that calls the three-argument one. `postPurchase` is the same helper
+for the purchase URL.
 
 **Kotlin: the request-building lambda.** `mockMvc.post(url) { ... }` is another extension
 function, like `get`. Its lambda has a request builder as its receiver, so `contentType = ...`
@@ -503,6 +514,132 @@ fun `POST inventory is case-sensitive`() {
 **Why:** this is the "exact match" decision (README, 2026-09-28) checked over HTTP. `WIDGET`
 becomes its own SKU, and `widget` keeps its 5.
 
+### Purchase: the success paths
+
+```kotlin
+/** Contract: 200 with "the remaining inventory for the SKU" as an InventoryItem. */
+@Test
+fun `POST purchase deducts stock and returns the remaining inventory`() {
+    insert("widget", 5)
+
+    postPurchase("widget", """{"quantity": 2}""").andExpect {
+        status { isOk() }
+        content {
+            contentType(MediaType.APPLICATION_JSON)
+            json("""{"skuId": "widget", "quantity": 3}""", JsonCompareMode.STRICT)
+        }
+    }
+    assertEquals(3, quantityOf("widget"))
+}
+
+/** Buying the whole stock is allowed and leaves the SKU at 0, still in inventory. */
+@Test
+fun `POST purchase can buy the last unit`() {
+    insert("widget", 5)
+
+    postPurchase("widget", """{"quantity": 5}""").andExpect {
+        status { isOk() }
+        content { json("""{"skuId": "widget", "quantity": 0}""", JsonCompareMode.STRICT) }
+    }
+    assertEquals(0, quantityOf("widget"))
+}
+```
+
+**Contract:** the response is the *remaining* stock (3), not the quantity bought (2). The
+`quantityOf` check shows the database agrees with what the client was told.
+
+**Why the last-unit test:** it's the boundary. `quantity >= :quantity` must allow buying exactly
+what's on hand; `>` would refuse it. `quantityOf` returning `0` (not `null`) also proves the row
+stays, so `GET /inventory/widget` keeps working for a sold-out SKU (the "zero-stock SKUs are
+listed" decision).
+
+### Purchase: 400 for insufficient stock, 404 for a missing SKU
+
+```kotlin
+/** Contract: "Returns 400 if there is insufficient inventory"; no partial fill. Message text agreed with Robert. */
+@Test
+fun `POST purchase returns 400 text when stock is insufficient`() {
+    insert("widget", 5)
+
+    postPurchase("widget", """{"quantity": 6}""")
+        .andExpectBadRequest("Insufficient inventory for widget")
+    assertEquals(5, quantityOf("widget"))
+}
+
+/** Contract: "Returns 404 if the SKU does not exist", as `text/plain`; the SKU is not created. */
+@Test
+fun `POST purchase returns 404 text for a missing SKU`() {
+    postPurchase("missing", """{"quantity": 1}""").andExpect {
+        status { isNotFound() }
+        content {
+            contentTypeCompatibleWith(MediaType.TEXT_PLAIN)
+            string("SKU not found: missing")
+        }
+    }
+    assertNull(quantityOf("missing"))
+}
+
+/** SKU ids match case-sensitively, so buying `WIDGET` is a 404 and `widget` is untouched. */
+@Test
+fun `POST purchase is case-sensitive`() {
+    insert("widget", 5)
+
+    postPurchase("WIDGET", """{"quantity": 1}""").andExpect {
+        status { isNotFound() }
+        content { string("SKU not found: WIDGET") }
+    }
+    assertEquals(5, quantityOf("widget"))
+}
+```
+
+**Contract: no partial fill.** "Only allowed if the current stock is sufficient to fulfill the
+*full* requested quantity." Asking for 6 of 5 must not sell 5; the stock stays at 5.
+
+**Why the 404 reuses `SkuNotFoundException`'s text:** a missing SKU means the same thing on every
+endpoint, so the purchase gets the same `SKU not found: <skuId>` body as
+`GET /inventory/{skuId}`, from the same handler. The message for insufficient stock,
+`Insufficient inventory for <skuId>`, was Robert's choice (2026-09-29). It follows the contract's
+example `Insufficient inventory` and names the SKU, like the 404 does.
+
+**Why `assertNull` after the 404:** unlike `POST /inventory/{skuId}`, a purchase must never
+create a SKU. A buggy upsert-style purchase would.
+
+### Purchase: invalid requests reuse the existing handlers
+
+```kotlin
+@ParameterizedTest(name = "quantity {0}")
+@ValueSource(ints = [0, -5])
+fun `POST purchase rejects a quantity below 1`(quantity: Int) { ... }
+
+// Why: Spring validates the body before the controller runs, so an invalid request is a 400
+// even when the SKU is also missing (decided with Robert, 2026-09-29).
+/** An invalid body for a missing SKU is a 400, not a 404. */
+@Test
+fun `POST purchase with an invalid quantity for a missing SKU is a 400`() {
+    postPurchase("missing", """{"quantity": 0}""")
+        .andExpectBadRequest("quantity must be at least 1")
+}
+
+@ParameterizedTest(name = "body [{0}]")
+@ValueSource(strings = [ /* the same nine bodies as for POST inventory */ ])
+fun `POST purchase rejects an unreadable body`(body: String) { ... }
+
+@Test
+fun `POST purchase rejects a non-JSON content type`() { ... }
+```
+
+These are the `POST /inventory/{skuId}` rejection tests pointed at the purchase URL, with the same
+bodies and messages. They should pass with **no new handler code**: `@RestControllerAdvice`
+applies to every controller method, so the `MethodArgumentNotValidException`,
+`HttpMessageNotReadableException` and `HttpMediaTypeNotSupportedException` handlers already cover
+the new endpoint as soon as it uses `@Valid @RequestBody InventoryQuantity`. The tests prove it
+rather than assuming it.
+
+**Spring: order of checks.** Spring reads the body (Jackson) and validates it (`@Valid`) while
+resolving the controller method's arguments, so before the method runs. A request that is both
+invalid and for a missing SKU never reaches the service's lookup, so it gets the `400`. The
+"missing SKU" test pins that order.
+
 ## Check your understanding
 
 - Does this test start Tomcat or open a network port? What does `mockMvc.get(...)` actually call?
@@ -523,3 +660,9 @@ becomes its own SKU, and `widget` keeps its 5.
 - `postInventory` has a default argument. What would the Java version of that helper need?
 - Where in the request path does each kind of `400` come from: before the controller, in the
   controller's validation, or after the database answers?
+- The purchase's invalid-body tests pass without any new handler. Why? What would you have to
+  forget in the controller for them to fail?
+- `{"quantity": 0}` to a missing SKU gets a `400`, not a `404`. At which step of the request does
+  Spring decide that?
+- Why does the purchase `404` test check that the SKU wasn't created, when the `GET` `404` test
+  doesn't?

@@ -5,6 +5,7 @@ package com.robertwoolbright.inventory.inventory
 
 import com.robertwoolbright.inventory.inventory.error.AddStockOverflowException
 import com.robertwoolbright.inventory.inventory.error.SkuNotFoundException
+import com.robertwoolbright.inventory.inventory.error.InsufficientInventoryException
 import org.springframework.stereotype.Service
 
 /** Service class for the various inventory flows. Used by controller layer and consumes the repository layer. */
@@ -31,5 +32,21 @@ class InventoryService(
         // Why: @Valid only protects HTTP requests; this also stops direct callers (0 would create an empty SKU).
         require(quantity >= 1) {"quantity must be at least 1, was $quantity"}
         return inventoryRepository.addStock(skuId, quantity) ?: throw AddStockOverflowException()
+    }
+    
+    /** 
+     * Removes quantity from a SKU's stock during a purchase. Returns the remaining InventoryItem on a success.
+     * @throws SkuNotFoundException when no sku is found.
+     * @throws InsufficientInventoryException if not enough quantity for the purchase.
+     * @throws IllegalArgumentException if quantity is less than 1 (a caller bug, so it surfaces as a 500).
+     */
+    fun purchaseInventory(skuId: String, quantity: Int): InventoryItem {
+        // Why: @Valid only protects HTTP requests; this also stops direct callers (Can't have a 0 quantity in a purchase and a negative value would add stock.).
+        require(quantity >= 1) {"quantity must be at least 1, was $quantity"}
+        return when (val purchaseOutcome = inventoryRepository.removeStock(skuId,quantity)){
+                is PurchaseResult.Purchased -> purchaseOutcome.item
+                PurchaseResult.SkuNotFound -> throw SkuNotFoundException(skuId)
+                PurchaseResult.InsufficientStock -> throw InsufficientInventoryException(skuId)
+            }
     }
 }

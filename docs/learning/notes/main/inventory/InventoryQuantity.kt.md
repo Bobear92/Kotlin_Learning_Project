@@ -11,8 +11,8 @@ one comes in. Jackson builds it from the request's JSON, and Bean Validation che
 `Int` inside it, so the [service](InventoryService.kt.md) and
 [repository](InventoryRepository.kt.md) never see this class.
 
-It will also be the request body for `POST /inventory/{skuId}/purchase`: the contract uses the same
-`InventoryQuantity` schema for both.
+It is also the request body for `POST /inventory/{skuId}/purchase`: the contract uses the same
+`InventoryQuantity` schema for both. (The class's KDoc still names only `POST /inventory/{skuId}`.)
 
 ## Walkthrough
 
@@ -31,7 +31,7 @@ Hibernate Validator, the engine that runs the checks (see
 ### The class
 
 ```kotlin
-/** One inventory quantity; used as the request body for POST /inventory/{skuId}. */
+/** One inventory quantity; used as the request body for POST /inventory/{skuId} and POST /inventory/{skuId}/purchase */
 data class InventoryQuantity(
     // Contract: quantity has minimum: 1 in inventory.yaml.
     @Min(1, message = "quantity must be at least 1") val quantity: Int

@@ -1,6 +1,6 @@
 # SkuNotFoundException.kt
 
-> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/error/SkuNotFoundException.kt](../../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/error/SkuNotFoundException.kt) · Last synced with code: 2026-09-27
+> Source: [src/main/kotlin/com/robertwoolbright/inventory/inventory/error/SkuNotFoundException.kt](../../../../../../src/main/kotlin/com/robertwoolbright/inventory/inventory/error/SkuNotFoundException.kt) · Last synced with code: 2026-09-29
 
 ## Role
 
@@ -32,7 +32,7 @@ parent `inventory` package must import this class, as the [service does](../Inve
 ### The whole class in one line
 
 ```kotlin
-/** Thrown when the database is queried with the SKU, but the result comes back as null. This is thrown at the service level and is mapped to a 404 by InventoryExceptionHandler. */
+/** Thrown when the database is queried with the SKU, but the result comes back as null. And thrown during the purchase flow on PurchaseResult.SkuNotFound. This is thrown at the service level and is mapped to a 404 by InventoryExceptionHandler. */
 class SkuNotFoundException(skuId: String) : RuntimeException("SKU not found: $skuId")
 ```
 
@@ -97,8 +97,8 @@ anyone to catch it either. `RuntimeException` still matters for two reasons:
 **Why a custom exception and not `ResponseStatusException`:** Spring's
 `ResponseStatusException(HttpStatus.NOT_FOUND, ...)` would carry the status itself, which puts HTTP
 into the service. A custom exception keeps HTTP out of it: the service says *what* went wrong, and the handler decides how
-that looks over HTTP. The purchase endpoint will throw the same exception for a missing SKU, and
-the same handler will map it. (`ResponseStatusException` also doesn't give a `text/plain` body by
+that looks over HTTP. The purchase endpoint throws the same exception for a missing SKU, and
+the same handler maps it. (`ResponseStatusException` also doesn't give a `text/plain` body by
 default; see [the handler notes](InventoryExceptionHandler.kt.md#the-class-and-why-its-an-advice).)
 
 **Contract:** the message `SKU not found: <skuId>` is the `404` body, word for word. The contract

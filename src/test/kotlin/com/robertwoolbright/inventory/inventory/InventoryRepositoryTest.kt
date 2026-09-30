@@ -15,7 +15,8 @@ import kotlin.test.assertTrue
 
 /**
  * [InventoryRepository] and the `inventory` schema against a real Postgres: row mapping, ordering,
- * single-SKU lookup, adding stock (create, add, overflow guard), and the `CHECK (quantity >= 0)` backstop.
+ * single-SKU lookup, adding stock (create, add, overflow guard), removing stock (purchased, not found,
+ * insufficient), and the `CHECK (quantity >= 0)` backstop.
  * Each test runs in a transaction that is rolled back.
  */
 @JdbcTest
@@ -169,6 +170,74 @@ class InventoryRepositoryTest @Autowired constructor(
 
         assertEquals(InventoryItem("WIDGET", 2), inventoryRepository.addStock("WIDGET", 2))
         assertEquals(5, quantityOf("widget"))
+    }
+
+    /** Contract: "Deducts the requested quantity"; the remaining stock comes back. */
+    @Test
+    fun `removeStock deducts the quantity and returns the remaining stock`() {
+        insert("widget", 5)
+
+        assertEquals(PurchaseResult.Purchased(InventoryItem("widget", 3)), inventoryRepository.removeStock("widget", 2))
+        assertEquals(3, quantityOf("widget"))
+    }
+
+    // Why: the boundary of `quantity >= :quantity`; writing `>` instead would refuse the last unit.
+    /** Buying exactly what is on hand succeeds and leaves a sold-out row with quantity 0, not a deleted one. */
+    @Test
+    fun `removeStock can sell the last unit and keeps the row at zero`() {
+        insert("widget", 5)
+
+        assertEquals(PurchaseResult.Purchased(InventoryItem("widget", 0)), inventoryRepository.removeStock("widget", 5))
+        assertEquals(0, quantityOf("widget"))
+    }
+
+    /** Contract: "only allowed if the current stock is sufficient to fulfill the full requested quantity": no partial fill. */
+    @Test
+    fun `removeStock refuses a purchase larger than the stock and changes nothing`() {
+        insert("widget", 5)
+
+        assertEquals(PurchaseResult.InsufficientStock, inventoryRepository.removeStock("widget", 6))
+        assertEquals(5, quantityOf("widget"))
+    }
+
+    /** A sold-out SKU exists, so buying from it is insufficient stock (400), not a missing SKU (404). */
+    @Test
+    fun `removeStock reports insufficient stock for a sold-out SKU`() {
+        insert("sold-out", 0)
+
+        assertEquals(PurchaseResult.InsufficientStock, inventoryRepository.removeStock("sold-out", 1))
+        assertEquals(0, quantityOf("sold-out"))
+    }
+
+    /** Contract: "Returns 404 if the SKU does not exist"; a purchase must never create the SKU. */
+    @Test
+    fun `removeStock reports a missing SKU and creates nothing`() {
+        insert("widget", 5)
+
+        assertEquals(PurchaseResult.SkuNotFound, inventoryRepository.removeStock("missing", 1))
+        assertNull(quantityOf("missing"))
+    }
+
+    // Why: SKU ids are an exact, case-sensitive match (README "Contract gaps" decision, 2026-09-28).
+    /** Buying `WIDGET` does not touch `widget`; `WIDGET` does not exist. */
+    @Test
+    fun `removeStock treats SKU ids case-sensitively`() {
+        insert("widget", 5)
+
+        assertEquals(PurchaseResult.SkuNotFound, inventoryRepository.removeStock("WIDGET", 1))
+        assertEquals(5, quantityOf("widget"))
+    }
+
+    // Why: a decoy row catches an UPDATE that forgot `sku_id = :skuId` and hit every row.
+    /** Buying one SKU leaves every other SKU alone. */
+    @Test
+    fun `removeStock changes only the given SKU`() {
+        insert("widget", 5)
+        insert("gadget", 3)
+
+        inventoryRepository.removeStock("widget", 2)
+
+        assertEquals(3, quantityOf("gadget"))
     }
 
     /** Oversell backstop: the database itself refuses to store negative stock. */

@@ -34,4 +34,12 @@ class InventoryController (
     /** Adds quantity to the SKU's stock, creating the SKU if it's new, and returns the new total for POST /inventory/{skuId}.*/
     @PostMapping("/{skuId}")
     fun receiveInventory(@PathVariable skuId: String, @Valid @RequestBody requestQuantity: InventoryQuantity): InventoryItem = inventoryService.receiveInventory(skuId, requestQuantity.quantity)
+    
+    // Contract: paths./inventory/{skuId}/purchase.post - 200 application/json with InventoryItem, 400 text/plain for a quantity below 1, an unreadable body, the wrong Content-Type, or insufficient amount of inventory, 404 text/plain for SKU not found.
+    
+    /** 
+     * Removes quantity from the SKU's stock on a purchase, and returns the remaining stock for POST /inventory/{skuId}/purchase. 
+     */
+    @PostMapping("/{skuId}/purchase")
+    fun purchaseInventory(@PathVariable skuId: String, @Valid @RequestBody requestQuantity: InventoryQuantity): InventoryItem = inventoryService.purchaseInventory(skuId, requestQuantity.quantity)
 }

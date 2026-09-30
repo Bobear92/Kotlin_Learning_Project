@@ -58,6 +58,16 @@ and `/walkthrough` add rows as new concepts come up.
 | `require` / `check` | `require(cond) { msg }` throws `IllegalArgumentException`; the message lambda runs only on failure | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
 | Block body vs expression body | `= expr` holds one expression; two steps (check, then act) read better as `{ }` with an explicit `return` | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
 | Class with no constructor parameters | `class E : RuntimeException("msg")`, created with `E()` | [AddStockOverflowException.kt](notes/main/inventory/error/AddStockOverflowException.kt.md) |
+| Sealed interfaces | `sealed interface` closes the list of implementations (same package + module), so a `when` over it can be exhaustive; Java 17's `sealed ... permits` | [PurchaseResult.kt](notes/main/inventory/PurchaseResult.kt.md) |
+| `object` and `data object` | A class with exactly one instance, used by name without `()`; `data` adds a readable `toString` | [PurchaseResult.kt](notes/main/inventory/PurchaseResult.kt.md) |
+| Nested classes | A class declared inside another is referenced as `Outer.Inner`; like a Java `static` nested class unless marked `inner` | [PurchaseResult.kt](notes/main/inventory/PurchaseResult.kt.md) |
+| `when` without a subject | `when { cond -> value }`: an `if`/`else if` chain, checked top to bottom, `else` required when used as a value | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| Smart casts | After `x != null` or `x is T`, the compiler treats a variable nothing can change in between (e.g. a local `val`) as the narrower type in that branch | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| `Int::class.java` vs `javaObjectType` | `.java` is the primitive `int.class`, `.javaObjectType` the boxed `Integer.class` (can hold `null`) | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| KDoc links `[Name]` | Square brackets in KDoc link to a declaration; Javadoc's `{@link}` | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
+| `when` with a subject, `is` and exhaustiveness | `when (val x = ...) { is A -> ...; B -> ... }`: type checks and equality; no `else` needed over a sealed type | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md#purchaseinventory-one-branch-per-outcome) |
+| `filterIsInstance<T>()` | Keeps the elements of type `T` and returns a `List<T>`: a smart cast for a whole list | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md#the-same-sku-purchase-race) |
+| `return` and a line break | A line break after a bare `return` ends the statement; the value has to start on the same line | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md#purchaseinventory-one-branch-per-outcome) |
 
 ## Spring
 
@@ -100,6 +110,7 @@ and `/walkthrough` add rows as new concepts come up.
 | `@RepeatedTest` | Runs a test N times; used for intermittent concurrency bugs | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
 | Test transactions are per thread | A `@JdbcTest` rollback covers only the test thread; worker threads commit on their own connections | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
 | Start gate (`CountDownLatch`) | Hold N threads at one line, then release them together so they really overlap | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
+| Request processing order | Routing → `@RequestBody` (Content-Type, then Jackson) → `@Valid` → the handler function; a bad body is a `400` before any database lookup could give a `404` | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md#post-inventoryskuidpurchase) |
 | `@PostMapping` + `@RequestBody` | Map a POST; Jackson reads the JSON body into a class through its primary constructor | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
 | `@Valid` + Bean Validation (`@Min`) | Constraints on a request class run only when the parameter has `@Valid`; failures throw `MethodArgumentNotValidException` | [InventoryQuantity.kt](notes/main/inventory/InventoryQuantity.kt.md) |
 | Request body failure order | Content-Type → JSON read → validation → the function; each failure is its own Spring exception | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
@@ -107,6 +118,8 @@ and `/walkthrough` add rows as new concepts come up.
 | `@ExceptionHandler` with no parameter | The annotation routes the exception; the parameter is only needed to read it | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
 | Three layers of checks | `@Valid` for clients (400), `require` for our own callers (500), DB `CHECK` as the backstop | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
 | Default response status | A plain return value is `200`; `201` needs `@ResponseStatus` or a `ResponseEntity`. Defaults are invisible in code, so tests pin them | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md#post-inventoryskuid) |
+| `@ExceptionHandler` parameters by type | Spring fills a handler's parameter with the thrown exception, matched by type; the name (`ex`) is only a convention | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md#handleinsufficientinventory-the-exception-comes-in-as-a-parameter) |
+| Fixed path segments and `405` | `"/{skuId}/purchase"` mixes a variable and a literal; a path that matches with the wrong method gets `405` | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md#post-inventoryskuidpurchase) |
 
 ## Database and API design
 
@@ -120,3 +133,8 @@ and `/walkthrough` add rows as new concepts come up.
 | `RETURNING` | A write returns the changed row in the same statement; no second `SELECT` | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#the-upsert) |
 | Lost update (find-then-write race) | Two requests read the same value and the second write erases the first; one atomic statement prevents it | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#addstock-the-signature-and-the-two-decisions) |
 | Overflow-safe guard | `current <= MAX - new` instead of `current + new <= MAX`, which itself overflows | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#the-overflow-guard) |
+| Data-modifying CTE | `WITH x AS (UPDATE ... RETURNING ...) SELECT ...`: a write and a read in one atomic statement | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#the-sql-a-data-modifying-cte) |
+| One snapshot per statement | Every part of a statement sees the data as it was when it started (except that an `UPDATE` re-checks rows changed by concurrent commits); only `RETURNING` shows the CTE's change | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#the-sql-a-data-modifying-cte) |
+| Scalar subquery, `EXISTS`, `SELECT 1` | `(SELECT ...)` as a value is `NULL` for no rows; `EXISTS` is `true`/`false`, never `NULL` | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#the-sql-a-data-modifying-cte) |
+| Conditional `UPDATE` under concurrency | Under `READ COMMITTED`, a waiting `UPDATE` re-checks its `WHERE` on the committed row, so two buyers can't both take the last unit | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#the-sql-a-data-modifying-cte) |
+| JDBC `NULL` vs `0` | `getInt` returns `0` for `NULL`; `getObject(col, Int::class.javaObjectType)` keeps `null` | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#reading-the-row-null-is-not-0) |

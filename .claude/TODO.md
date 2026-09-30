@@ -45,12 +45,26 @@ and checks items off as they are done. Newest decisions are recorded in the READ
 - [ ] Optional: add a decoy row to the zero-stock `findBySkuId` / `GET /inventory/{skuId}` tests (today they pass even without a `WHERE` clause; offered 2026-09-28, not taken yet)
 - [ ] `POST /inventory/{skuId}` (create or add). Contract gaps decided 2026-09-28 (README). Tests written 2026-09-28: 7 repository (`addStock`), 8 controller (incl. two parameterized), 2 concurrency (`InventoryConcurrencyTest`, `@RepeatedTest(5)`); Robert writes the code. Order: validation dependency → Jackson strictness in application.yml → `InventoryQuantity` → `addStock` → overflow exception → service `receiveInventory` → controller `@PostMapping` → four 400 handlers. Done: `InventoryRepository.addStock` (atomic upsert, `WHERE inventory.quantity <= :maxQuantity - EXCLUDED.quantity`, RETURNING → `singleOrNull`; 15/15 repository + concurrency tests green, 2026-09-28). `spring-boot-starter-validation` added; Jackson strictness in application.yml (`accept-float-as-int`, `allow-coercion-of-scalars` off; verified against Jackson 3 defaults) (2026-09-28). Done: `InventoryQuantity` DTO with `@Min(1, message = ...)` (cc34bc4, 2026-09-28). Done: `error/AddStockOverflowException` (no-arg, message in the exception, 2026-09-28). Done: service `receiveInventory(skuId, quantity)` (String + Int, not the DTO; commit 9a4c81a, 2026-09-28). Done: controller `receiveInventory` with `@PostMapping("/{skuId}")` + `@Valid @RequestBody InventoryQuantity` (create/add/case-sensitive tests green; the 400 tests fail as expected: empty-body 400s from Spring's default resolver, 415 for Content-Type, 500 for overflow, 2026-09-28). Done: the four 400 handlers in `InventoryExceptionHandler` (validation message read from `@Min`; Spring's `ex.message` never sent to clients; commit d972893, 2026-09-28). Review done 2026-09-28: comment tidy (0705412), service `require(quantity >= 1)` + `InventoryServiceTest` (3dd5d15; 0 used to create an empty SKU), handler renamed `handleValidationFailure` (a7e54e1); 53/53 green. Study notes written 2026-09-28. Walkthrough done 2026-09-29. Next: `/ship`
 - [x] `/walkthrough` of `POST /inventory/{skuId}` (2026-09-29; six new interview-prep questions)
-- [ ] `POST /inventory/{skuId}/purchase`
+- [ ] `POST /inventory/{skuId}/purchase`. Decided 2026-09-29 (Robert): one CTE statement classifies the outcome
+      (`WITH purchased AS (UPDATE … RETURNING) SELECT remaining, EXISTS(…)`), 400 body `Insufficient inventory for <skuId>`,
+      validation before lookup (invalid body on a missing SKU is a 400). Tests written 2026-09-29: 7 repository, 4 service
+      (one parameterized), 9 controller (two parameterized), 3 concurrency races (`@RepeatedTest(5)`); Robert writes the code.
+      Order: `PurchaseResult` → `removeStock` → `InsufficientInventoryException` → service `purchaseInventory` → controller → handler.
+      Done: `PurchaseResult` sealed interface (2026-09-29). Done: `InventoryRepository.removeStock` (CTE; `Int?` via
+      `getObject(…, Int::class.javaObjectType)` so NULL ≠ 0; compiles, tests blocked until the service compiles, 2026-09-29)
+      Done: `InsufficientInventoryException` + `InventoryService.purchaseInventory` (d6234d6, 2026-09-29; repository 22/22
+      and service 9/9 green). Done: controller `purchaseInventory` with `@PostMapping("/{skuId}/purchase")` + `@Valid`
+      (2026-09-29; controller 40/41 green, the insufficient-stock 400 test fails with an unhandled
+      `InsufficientInventoryException` as expected). Done: `handleInsufficientInventory` (400 text/plain `ex.message`)
+      and the `// Contract:` comments on the 404 and three request-reading 400 handlers widened to the purchase path,
+      plus the service KDoc/`// Why:` tidy (091a7ef, 2026-09-29; full suite 98/98 green). Study notes written
+      2026-09-29 (new: `PurchaseResult`, `InsufficientInventoryException`); purchase decisions recorded in the README
+      ("Contract gaps (purchase)"). Next: `/walkthrough`, then `/ship`.
 - [ ] Contract-validation test: check MockMvc responses against inventory.yaml (decided with the
       Controllers decision; do it once there is more than one endpoint to validate)
 - [ ] Decide on demo seed data for a running app, once `POST /inventory/{skuId}` exists
-- [ ] Error handling: `text/plain` 400/404 bodies exactly as the contract specifies
-      (404 for missing SKU done 2026-09-27 via `InventoryExceptionHandler`; POST's four 400s done 2026-09-28; purchase's 400/404 still to do)
+- [x] Error handling: `text/plain` 400/404 bodies exactly as the contract specifies
+      (404 for missing SKU done 2026-09-27 via `InventoryExceptionHandler`; POST's four 400s done 2026-09-28; purchase's 400/404 done 2026-09-29)
 - [ ] Decide whether error responses should declare `charset=UTF-8`: today `Content-Type: text/plain` has no charset while the body is UTF-8 (seen with `curl` on 2026-09-27; only matters for non-ASCII SKUs)
 
 ## Oversell protection: test plan
@@ -61,30 +75,33 @@ level we build, using several different mechanisms, because each one catches a d
 class of bug. Each item below is also a teaching topic for a walkthrough.
 
 ### Correctness in isolation
-- [ ] Repository tests against a real Postgres (Testcontainers, not H2): purchase exact stock → 0,
+- [x] Repository tests against a real Postgres (Testcontainers, not H2): purchase exact stock → 0,
       purchase stock + 1 → rejected and quantity unchanged, purchase on missing SKU → not found
-- [ ] Controller tests (`MockMvc`): 400 with `text/plain` body on insufficient stock, 404 on missing SKU
+      (`removeStock` tests, green 2026-09-29)
+- [x] Controller tests (`MockMvc`): 400 with `text/plain` body on insufficient stock, 404 on missing SKU (green 2026-09-29)
 
 ### Concurrency
-- [ ] **Same-SKU purchase race.** Seed stock S, fire N > S concurrent purchases of 1 through
+- [x] **Same-SKU purchase race.** Seed stock S, fire N > S concurrent purchases of 1 through
       a start gate (`CountDownLatch` or coroutines) so they really overlap. Assert: exactly S
       succeed (200), N − S are rejected (400), final quantity is 0, never negative.
-- [ ] **Uneven quantities.** Concurrent purchases of different sizes. Assert: the sum of
-      successful purchases ≤ S, and final = S − sum(successful).
-- [ ] **Mixed receive + purchase race.** Concurrent restocks and purchases. Assert:
-      final = initial + sum(received) − sum(successful purchases).
+      (`InventoryConcurrencyTest`, at the repository level; green 2026-09-29)
+- [x] **Uneven quantities.** Concurrent purchases of different sizes. Assert: the sum of
+      successful purchases ≤ S, and final = S − sum(successful). (green 2026-09-29)
+- [x] **Mixed receive + purchase race.** Concurrent restocks and purchases. Assert:
+      final = initial + sum(received) − sum(successful purchases). (green 2026-09-29)
 - [x] **New-SKU creation race.** Concurrent first-time `POST`s for a SKU that doesn't exist yet.
       All succeed, no duplicate-key errors, final = sum of all quantities.
       (`InventoryConcurrencyTest`, plus a lost-update race on an existing SKU; green with `addStock`, 2026-09-28)
 - [ ] **Repeat to flush out flakiness.** Run the race tests many times (`@RepeatedTest`), since
-      concurrency bugs are intermittent. (receive races use `@RepeatedTest(5)`, 2026-09-28)
+      concurrency bugs are intermittent. (all five races use `@RepeatedTest(5)`, 2026-09-29; raise the count
+      or add a stress profile if "many times" should mean more)
 - [ ] **Negative control.** Temporarily swap in a naive read-then-write implementation and show
       the race test *fails*. This proves the test can actually detect an oversell.
 
 ### Database backstop
-- [ ] Test that the `CHECK (quantity >= 0)` constraint rejects a direct update that would go
+- [x] Test that the `CHECK (quantity >= 0)` constraint rejects a direct update that would go
       negative, so the database protects the data even if the application has a bug.
-      (test written in `InventoryRepositoryTest` 2026-09-24; passes once Robert's V1 migration exists)
+      (`database rejects an update that would make quantity negative` in `InventoryRepositoryTest`; green since V1)
 
 ### Across instances and under load
 - [ ] **Multiple app instances.** Two app instances (or two Spring contexts) against the same

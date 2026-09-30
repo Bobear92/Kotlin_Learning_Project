@@ -21,7 +21,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 /**
- * `GET /inventory`, `GET /inventory/{skuId}` and `POST /inventory/{skuId}` through the full stack
+ * `GET /inventory`, `GET /inventory/{skuId}`, `POST /inventory/{skuId}` and
+ * `POST /inventory/{skuId}/purchase` through the full stack
  * (MockMvc → controller → service → repository → Postgres), checking status, content type and the
  * exact body (JSON on success, plain text on 400/404) against the contract, and that rejected
  * requests leave stock unchanged.
@@ -59,6 +60,16 @@ class InventoryControllerTest @Autowired constructor(
         mediaType: MediaType = MediaType.APPLICATION_JSON,
     ): ResultActionsDsl =
         mockMvc.post("/inventory/$skuId") {
+            contentType = mediaType
+            content = body
+        }
+
+    private fun postPurchase(
+        skuId: String,
+        body: String,
+        mediaType: MediaType = MediaType.APPLICATION_JSON,
+    ): ResultActionsDsl =
+        mockMvc.post("/inventory/$skuId/purchase") {
             contentType = mediaType
             content = body
         }
@@ -265,6 +276,120 @@ class InventoryControllerTest @Autowired constructor(
             status { isOk() }
             content { json("""{"skuId": "WIDGET", "quantity": 2}""", JsonCompareMode.STRICT) }
         }
+        assertEquals(5, quantityOf("widget"))
+    }
+
+    /** Contract: 200 with "the remaining inventory for the SKU" as an InventoryItem. */
+    @Test
+    fun `POST purchase deducts stock and returns the remaining inventory`() {
+        insert("widget", 5)
+
+        postPurchase("widget", """{"quantity": 2}""").andExpect {
+            status { isOk() }
+            content {
+                contentType(MediaType.APPLICATION_JSON)
+                json("""{"skuId": "widget", "quantity": 3}""", JsonCompareMode.STRICT)
+            }
+        }
+        assertEquals(3, quantityOf("widget"))
+    }
+
+    /** Buying the whole stock is allowed and leaves the SKU at 0, still in inventory. */
+    @Test
+    fun `POST purchase can buy the last unit`() {
+        insert("widget", 5)
+
+        postPurchase("widget", """{"quantity": 5}""").andExpect {
+            status { isOk() }
+            content { json("""{"skuId": "widget", "quantity": 0}""", JsonCompareMode.STRICT) }
+        }
+        assertEquals(0, quantityOf("widget"))
+    }
+
+    /** Contract: "Returns 400 if there is insufficient inventory"; no partial fill. Message text agreed with Robert. */
+    @Test
+    fun `POST purchase returns 400 text when stock is insufficient`() {
+        insert("widget", 5)
+
+        postPurchase("widget", """{"quantity": 6}""")
+            .andExpectBadRequest("Insufficient inventory for widget")
+        assertEquals(5, quantityOf("widget"))
+    }
+
+    /** Contract: "Returns 404 if the SKU does not exist", as `text/plain`; the SKU is not created. */
+    @Test
+    fun `POST purchase returns 404 text for a missing SKU`() {
+        postPurchase("missing", """{"quantity": 1}""").andExpect {
+            status { isNotFound() }
+            content {
+                contentTypeCompatibleWith(MediaType.TEXT_PLAIN)
+                string("SKU not found: missing")
+            }
+        }
+        assertNull(quantityOf("missing"))
+    }
+
+    /** SKU ids match case-sensitively, so buying `WIDGET` is a 404 and `widget` is untouched. */
+    @Test
+    fun `POST purchase is case-sensitive`() {
+        insert("widget", 5)
+
+        postPurchase("WIDGET", """{"quantity": 1}""").andExpect {
+            status { isNotFound() }
+            content { string("SKU not found: WIDGET") }
+        }
+        assertEquals(5, quantityOf("widget"))
+    }
+
+    /** Contract: `quantity` has `minimum: 1`, so 0 and negatives are a 400 and stock is untouched. */
+    @ParameterizedTest(name = "quantity {0}")
+    @ValueSource(ints = [0, -5])
+    fun `POST purchase rejects a quantity below 1`(quantity: Int) {
+        insert("widget", 5)
+
+        postPurchase("widget", """{"quantity": $quantity}""")
+            .andExpectBadRequest("quantity must be at least 1")
+        assertEquals(5, quantityOf("widget"))
+    }
+
+    // Why: Spring validates the body before the controller runs, so an invalid request is a 400
+    // even when the SKU is also missing (decided with Robert, 2026-09-29).
+    /** An invalid body for a missing SKU is a 400, not a 404. */
+    @Test
+    fun `POST purchase with an invalid quantity for a missing SKU is a 400`() {
+        postPurchase("missing", """{"quantity": 0}""")
+            .andExpectBadRequest("quantity must be at least 1")
+    }
+
+    /** Same strict JSON rules as `POST /inventory/{skuId}`: anything else is a 400 text/plain. */
+    @ParameterizedTest(name = "body [{0}]")
+    @ValueSource(
+        strings = [
+            "",
+            "{",
+            "null",
+            "[5]",
+            "{}",
+            """{"quantity": null}""",
+            """{"quantity": "5"}""",
+            """{"quantity": 1.5}""",
+            """{"quantity": 3000000000}""",
+        ],
+    )
+    fun `POST purchase rejects an unreadable body`(body: String) {
+        insert("widget", 5)
+
+        postPurchase("widget", body).andExpectBadRequest("Invalid request body")
+        assertEquals(5, quantityOf("widget"))
+    }
+
+    /** Same Content-Type rule as `POST /inventory/{skuId}`: only `application/json`, else a 400. */
+    @Test
+    fun `POST purchase rejects a non-JSON content type`() {
+        insert("widget", 5)
+
+        postPurchase("widget", "1", MediaType.TEXT_PLAIN)
+            .andExpectBadRequest("Content-Type must be application/json")
         assertEquals(5, quantityOf("widget"))
     }
 }
