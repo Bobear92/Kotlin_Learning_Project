@@ -116,6 +116,11 @@ For any other code change, run `/sync-docs` before handing the work back.
   `git switch main && git pull --ff-only && git switch -c <type>/<slug>`, where `<type>` is
   `feature`, `fix`, `chore`, `docs` or `test` (e.g. `feature/get-inventory`).
 - One branch per piece of work. Commit in small, logical steps; the reviewers read the history.
+- **Commit attribution** (Robert, 2026-09-30): a commit that contains only Robert's code gets **no**
+  `Co-Authored-By: Claude` trailer; its body says `Written by Robert; Claude coached and ran the commit.`
+  Commits of Claude's work (tests, docs, tooling) keep the trailer. Don't mix the two in one commit.
+  Earlier commits all carry the trailer; `python scripts/authorship_audit.py` shows from the session
+  transcripts what Claude actually changed under `src/main/`.
 - **`/ship`** is the only way work reaches `main`: push → PR → merge commit → back to an
   updated `main`. Never squash or rebase merges (the brief says "Do not squash commits").
 - Enforced by `scripts/branch_guard.py`:

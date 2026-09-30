@@ -239,6 +239,7 @@ committed so reviewers can see how the AI was directed and checked:
 | [scripts/branch_guard.py](scripts/branch_guard.py) | Keeps all work off `main`: flags a session that starts on `main`, blocks edits and commits there, and blocks direct pushes to `main` and squash merges. |
 | [scripts/code_guard.py](scripts/code_guard.py) | Makes Claude Code ask me before Claude writes production code under `src/main/`: I write that code, Claude writes tests and coaches. |
 | [scripts/test_report.py](scripts/test_report.py) | Turns Gradle's JUnit XML into the readable Markdown test report shown on each GitHub Actions run (also runnable locally). |
+| [scripts/authorship_audit.py](scripts/authorship_audit.py) | Proves who wrote the production code: lists every change Claude made under `src/main/`, from the committed session transcripts, and whether it touched code or only comments. Needed because Claude ran the commits, so every commit carries its `Co-Authored-By` trailer. Run `python scripts/authorship_audit.py`. |
 | [scripts/check_kdoc.py](scripts/check_kdoc.py) | Reports missing KDoc after every edit to a `.kt` file. |
 | [scripts/check_notes.py](scripts/check_notes.py) | Stop hook: Claude can't finish a turn while a source file has changed more recently than its study notes. |
 | [scripts/export_sessions.py](scripts/export_sessions.py) | Exports session transcripts to `docs/ai-sessions/` after every Claude turn. |

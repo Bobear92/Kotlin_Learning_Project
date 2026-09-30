@@ -34,6 +34,11 @@ and checks items off as they are done. Newest decisions are recorded in the READ
 
 ## Tooling
 
+- [x] `scripts/authorship_audit.py`: lists every Claude change under `src/main/` from the session transcripts
+      (code vs comments only, plus Robert's request before it). Result 2026-09-30: code changes only in the
+      2026-09-23 scaffold and the 2026-09-24 incident; after that, 7 comment/KDoc edits, each requested.
+      New rule in CLAUDE.md: commits of Robert's code carry no Claude trailer (2026-09-30)
+
 - [x] GitHub Actions CI (`.github/workflows/tests.yml`): `Tests` (`./gradlew build`) and `Load test`
       (`./gradlew loadTest`) jobs on every push, PR and manual run, with a readable run summary from
       `scripts/test_report.py` and the HTML reports as artifacts. `/ship` waits for both checks.
