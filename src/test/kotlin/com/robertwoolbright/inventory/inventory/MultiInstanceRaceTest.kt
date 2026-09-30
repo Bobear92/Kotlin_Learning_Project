@@ -32,7 +32,7 @@ class MultiInstanceRaceTest {
     }
 
     /** Buyers of 1 alternate between the instances; the oversell check is the same as for one instance. */
-    @RepeatedTest(3)
+    @RepeatedTest(value = 3, name = RepeatedTest.LONG_DISPLAY_NAME)
     fun `purchases split across two instances never oversell`() {
         val stock = 10
         instanceA.receive("widget", stock)
@@ -48,7 +48,7 @@ class MultiInstanceRaceTest {
     // Why: restocks go only to A and purchases only to B, so every interleaving of the two apps'
     // writes to the one row is exercised. Demand (30 x 5 = 150) exceeds supply (20 + 30 x 3 = 110).
     /** Restocks through one instance and purchases through the other keep an exact balance. */
-    @RepeatedTest(3)
+    @RepeatedTest(value = 3, name = RepeatedTest.LONG_DISPLAY_NAME)
     fun `restocks on one instance and purchases on the other keep an exact balance`() {
         val initial = 20
         instanceA.receive("widget", initial)

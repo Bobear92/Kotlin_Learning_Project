@@ -204,7 +204,7 @@ class InventoryControllerTest @Autowired constructor(
     }
 
     /** Contract: `quantity` has `minimum: 1`, so 0 and negatives are a 400 and stock is untouched. */
-    @ParameterizedTest(name = "quantity {0}")
+    @ParameterizedTest(name = "{displayName} [quantity {0}]")
     @ValueSource(ints = [0, -5])
     fun `POST inventory rejects a quantity below 1`(quantity: Int) {
         insert("widget", 5)
@@ -225,7 +225,7 @@ class InventoryControllerTest @Autowired constructor(
     // Why: strict JSON (README "Contract gaps" decision, 2026-09-28). Jackson's defaults would turn
     // "5" into 5 and 1.5 into 1; stock counts must never be guessed.
     /** Any body that isn't `{"quantity": <whole number that fits in Int>}` is a 400 text/plain. */
-    @ParameterizedTest(name = "body [{0}]")
+    @ParameterizedTest(name = "{displayName} [body {0}]")
     @ValueSource(
         strings = [
             "",
@@ -342,7 +342,7 @@ class InventoryControllerTest @Autowired constructor(
     }
 
     /** Contract: `quantity` has `minimum: 1`, so 0 and negatives are a 400 and stock is untouched. */
-    @ParameterizedTest(name = "quantity {0}")
+    @ParameterizedTest(name = "{displayName} [quantity {0}]")
     @ValueSource(ints = [0, -5])
     fun `POST purchase rejects a quantity below 1`(quantity: Int) {
         insert("widget", 5)
@@ -362,7 +362,7 @@ class InventoryControllerTest @Autowired constructor(
     }
 
     /** Same strict JSON rules as `POST /inventory/{skuId}`: anything else is a 400 text/plain. */
-    @ParameterizedTest(name = "body [{0}]")
+    @ParameterizedTest(name = "{displayName} [body {0}]")
     @ValueSource(
         strings = [
             "",

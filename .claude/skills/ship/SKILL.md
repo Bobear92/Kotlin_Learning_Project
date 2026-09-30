@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Ship the current branch. Commits any remaining work, pushes to GitHub, opens a pull request, merges it into main with a merge commit (never squash), and returns to an updated main. Use when Robert says to ship, push, or merge the current work.
+description: Ship the current branch. Commits any remaining work, pushes to GitHub, opens a pull request, waits for the CI checks to pass, merges it into main with a merge commit (never squash), and returns to an updated main. Use when Robert says to ship, push, or merge the current work.
 argument-hint: "[optional: PR title]"
 disable-model-invocation: true
 ---
@@ -22,10 +22,11 @@ around it (no force-push, no `--no-verify`, no merging from the command line).
   message describing the change, ending with the attribution line from the system reminder.
 - If there are no commits ahead of `origin/main`, stop. There's nothing to ship.
 
-## 2. Checks
+## 2. Local checks
 
-_Placeholder: build, tests, contract validation and the doc-reviewer gate will be
-added here later._
+- `python scripts/check_notes.py` must print nothing (study notes in sync). If it reports
+  anything, stop and run `/sync-docs` first.
+- The build and tests run in CI (step 5), not here.
 
 ## 3. Sync with main
 
@@ -42,7 +43,18 @@ added here later._
   - **Body:** a `## Summary` of what changed and why (bullets), a `## Commits` list, and the
     PR attribution line from the system reminder at the end.
 
-## 5. Merge
+## 5. Wait for CI
+
+The `Tests` workflow (`.github/workflows/tests.yml`) runs two checks on the pull request:
+**Tests** (`./gradlew build`) and **Load test** (`./gradlew loadTest`).
+
+- `gh pr checks <number> --watch --fail-fast` waits until they finish (a few minutes).
+- If any check fails, **stop; don't merge.** Give Robert the run's URL (its summary page has the
+  test report with every failure and its message), explain the failure, and fix it on the branch.
+  Then push again and repeat this step.
+- Only continue when every check passed.
+
+## 6. Merge
 
 - `gh pr merge <number> --merge --delete-branch`
   - Always use `--merge`. **Never `--squash` or `--rebase`**, because the assessment reviewers
@@ -50,7 +62,7 @@ added here later._
 - `git switch main && git pull --ff-only`
 - Delete the local branch if `gh` didn't: `git branch -d <branch>`.
 
-## 6. Report
+## 7. Report
 
-Give the PR URL, the merge commit SHA, and the commits that were shipped. Remind Robert
+Give the PR URL, the merge commit SHA, the CI run URL, and the commits that were shipped. Remind Robert
 that the next piece of work needs a new branch; the branch guard will enforce this.

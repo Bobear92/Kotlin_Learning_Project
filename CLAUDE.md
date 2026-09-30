@@ -128,8 +128,9 @@ For any other code change, run `/sync-docs` before handing the work back.
 - `skills/feature/`: the `/feature` workflow above.
 - `skills/walkthrough/`: `/walkthrough`, an interactive line-by-line teaching session
   on recent changes, logged to [docs/learning/walkthroughs/](docs/learning/walkthroughs/).
-- `skills/ship/`: `/ship`, which pushes the current branch, opens a PR, and merges it into
-  `main` with a merge commit. Build, test and review gates will be added later.
+- `skills/ship/`: `/ship`, which pushes the current branch, opens a PR, waits for the CI checks
+  (`.github/workflows/tests.yml`: tests + load test) to pass, and merges it into `main` with a
+  merge commit.
 - `skills/sync-docs/`: `/sync-docs`, which updates study notes, the concepts index, the README
   and TODO for whatever code changed, then runs `doc-reviewer`.
 - `agents/doc-reviewer.md`: read-only reviewer that checks changed code and its notes against

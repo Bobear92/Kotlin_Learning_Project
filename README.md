@@ -1,5 +1,7 @@
 # Nuuly Inventory API
 
+[![Tests](https://github.com/Bobear92/Nuuly_Inventory_Assessment/actions/workflows/tests.yml/badge.svg)](https://github.com/Bobear92/Nuuly_Inventory_Assessment/actions/workflows/tests.yml)
+
 A small inventory-management REST API built for the Nuuly services assessment. It
 receives stock by SKU, processes purchases without overselling, and reports current
 inventory levels.
@@ -147,6 +149,17 @@ curl -i http://localhost:8080/inventory/CW-XYCS-BM-01
 Docker Compose support) and stops it on shutdown. Tests don't use Compose; Testcontainers
 starts a fresh Postgres for them. No database URL or password needs configuring.
 
+**Continuous integration.** Every push and pull request runs
+[.github/workflows/tests.yml](.github/workflows/tests.yml) on GitHub Actions: one job runs
+`./gradlew build` (every test except the load test), a second runs `./gradlew loadTest` in
+parallel. Each run's summary page (Actions tab → a run) shows a readable report from
+[scripts/test_report.py](scripts/test_report.py): the tests grouped by what they prove, every
+failure with its assertion message, every test by name, and the load test's throughput and
+latency. The full Gradle HTML report is attached to the run as an artifact. The same report works
+locally after a build: `python scripts/test_report.py build/test-results/test`. The "Run
+workflow" button on the Actions tab starts a fresh run. `/ship` waits for both checks to pass
+before merging.
+
 **Troubleshooting (Windows):** if `gradlew` says `JAVA_HOME is not set` right after installing
 the JDK, the terminal (or VS Code itself) was opened before the install and has a stale
 environment. Close and reopen it completely.
@@ -171,6 +184,7 @@ src/test/kotlin/com/robertwoolbright/inventory/
   inventory/                  Feature tests: repository, service, controller, contract, races,
                               negative control, multi-instance, property-based, load
   support/                    Shared test setup (Testcontainers Postgres, race helper, HTTP client)
+.github/workflows/       CI: tests + load test on every push, with a readable report
 .claude/                 Claude Code configuration (hooks, agents, skills) — see below
 CLAUDE.md                Project memory and coding standards for Claude Code
 docs/
@@ -179,7 +193,7 @@ docs/
     walkthroughs/        Logs of each /walkthrough session
     kotlin-concepts.md   Index of every Kotlin/Spring concept, linked to its notes
   ai-sessions/           Exported transcripts of every AI session on this project
-scripts/                 Hook scripts (branch guard, KDoc check, session export)
+scripts/                 Hook scripts (branch guard, KDoc check, session export) and the CI test report
 ```
 
 **Package by feature.** Code is grouped by what it does (`inventory/`), not by technical
@@ -224,6 +238,7 @@ committed so reviewers can see how the AI was directed and checked:
 | [.claude/settings.json](.claude/settings.json) | Hook configuration for the scripts below. |
 | [scripts/branch_guard.py](scripts/branch_guard.py) | Keeps all work off `main`: flags a session that starts on `main`, blocks edits and commits there, and blocks direct pushes to `main` and squash merges. |
 | [scripts/code_guard.py](scripts/code_guard.py) | Makes Claude Code ask me before Claude writes production code under `src/main/`: I write that code, Claude writes tests and coaches. |
+| [scripts/test_report.py](scripts/test_report.py) | Turns Gradle's JUnit XML into the readable Markdown test report shown on each GitHub Actions run (also runnable locally). |
 | [scripts/check_kdoc.py](scripts/check_kdoc.py) | Reports missing KDoc after every edit to a `.kt` file. |
 | [scripts/check_notes.py](scripts/check_notes.py) | Stop hook: Claude can't finish a turn while a source file has changed more recently than its study notes. |
 | [scripts/export_sessions.py](scripts/export_sessions.py) | Exports session transcripts to `docs/ai-sessions/` after every Claude turn. |

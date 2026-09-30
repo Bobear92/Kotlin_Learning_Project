@@ -64,7 +64,7 @@ the thread pool, generic functions, function types and `runCatching`. The helper
 ### The new-SKU creation race
 
 ```kotlin
-@RepeatedTest(5)
+@RepeatedTest(value = 5, name = RepeatedTest.LONG_DISPLAY_NAME)
 fun `concurrent first-time adds for a new SKU all succeed and sum up`() {
     val threads = 50
 
@@ -95,14 +95,19 @@ leaving only the exceptions. `all { }` is `true` if the condition holds for ever
 failure. `"adds failed: $failures"` shows *which* exceptions happened, which beats a bare
 "expected true".
 
-**JUnit: `@RepeatedTest(5)`.** Runs the test five times, each a separate result with its own
-`@BeforeEach`. Races are intermittent; a broken implementation might pass once by luck, but
-rarely five times in a row.
+**JUnit: `@RepeatedTest(value = 5, name = RepeatedTest.LONG_DISPLAY_NAME)`.** Runs the test five
+times, each a separate result with its own `@BeforeEach`. Races are intermittent; a broken
+implementation might pass once by luck, but rarely five times in a row. `name` sets each run's
+display name; `LONG_DISPLAY_NAME` is JUnit's built-in pattern
+`"{displayName} :: repetition {currentRepetition} of {totalRepetitions}"`, so reports show which
+test a repetition belongs to (the default is a bare `repetition 1 of 5`; changed 2026-09-30 for
+the CI test report). Kotlin can use the Java constant directly because annotation arguments must be
+compile-time constants, and it is one.
 
 ### The lost-update race
 
 ```kotlin
-@RepeatedTest(5)
+@RepeatedTest(value = 5, name = RepeatedTest.LONG_DISPLAY_NAME)
 fun `concurrent adds to an existing SKU are never lost`() {
     jdbcClient.sql("INSERT INTO inventory (sku_id, quantity) VALUES ('widget', 10)").update()
     val threads = 50
@@ -133,7 +138,7 @@ leave it out; if needed, it's available as `it`.
  * Same-SKU purchase race: with stock S and N > S buyers of 1, exactly S succeed, N - S are refused
  * as insufficient stock, and the SKU ends at 0, never negative.
  */
-@RepeatedTest(5)
+@RepeatedTest(value = 5, name = RepeatedTest.LONG_DISPLAY_NAME)
 fun `concurrent purchases never sell more than the stock`() {
     val stock = 10
     jdbcClient.sql("INSERT INTO inventory (sku_id, quantity) VALUES ('widget', ?)").param(stock).update()
@@ -180,7 +185,7 @@ because the line before already asserted there are no failures.
 ### Uneven quantities
 
 ```kotlin
-@RepeatedTest(5)
+@RepeatedTest(value = 5, name = RepeatedTest.LONG_DISPLAY_NAME)
 fun `concurrent purchases of different sizes never oversell`() {
     val stock = 100
     jdbcClient.sql("INSERT INTO inventory (sku_id, quantity) VALUES ('widget', ?)").param(stock).update()
@@ -224,7 +229,7 @@ whatever the lambda returns for each element.
 // Why: demand (30 x 5 = 150) exceeds supply (20 + 30 x 3 = 110), so some purchases are refused
 // and the test exercises both outcomes under contention.
 ...
-@RepeatedTest(5)
+@RepeatedTest(value = 5, name = RepeatedTest.LONG_DISPLAY_NAME)
 fun `concurrent restocks and purchases keep an exact balance`() {
     val initial = 20
     jdbcClient.sql("INSERT INTO inventory (sku_id, quantity) VALUES ('widget', ?)").param(initial).update()
