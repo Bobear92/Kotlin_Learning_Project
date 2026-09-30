@@ -56,3 +56,25 @@ kotlin {
 tasks.withType<Test> {
     useJUnitPlatform()
 }
+
+// Why: the load test runs for a fixed time (20 s by default), too slow for every build, so it has
+// its own task. Considered always running it: that would make every `./gradlew build` slower.
+tasks.test {
+    useJUnitPlatform { excludeTags("load") }
+}
+
+// Runs only the @Tag("load") tests: ./gradlew loadTest [-Dload.seconds=60 -Dload.clients=100]
+tasks.register<Test>("loadTest") {
+    description = "Runs the HTTP load test against the real app."
+    group = "verification"
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform { includeTags("load") }
+    shouldRunAfter(tasks.test)
+    // Why: a load test is a measurement; rerun it every time instead of reusing the last result.
+    outputs.upToDateWhen { false }
+    testLogging.showStandardStreams = true
+    for (key in listOf("load.seconds", "load.clients")) {
+        providers.systemProperty(key).orNull?.let { systemProperty(key, it) }
+    }
+}

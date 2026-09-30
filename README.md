@@ -103,9 +103,19 @@ Kotlin doesn't favor any particular database; it uses the same JDBC drivers as J
 favor data-access libraries that work with immutable `data class`es (`JdbcClient`, Spring Data
 JDBC, Exposed) over JPA, which needs compiler plugins to work around Kotlin's final-by-default classes.
 
-The oversell guarantee is tested with several different mechanisms: race tests, a negative
-control, multi-instance tests, load tests and property-based tests. The full plan is in
-[.claude/TODO.md](.claude/TODO.md#oversell-protection-test-plan).
+The oversell guarantee is tested with several different mechanisms, each catching a different
+class of bug (the full plan is in [.claude/TODO.md](.claude/TODO.md#oversell-protection-test-plan)):
+
+| Test | What it proves |
+| --- | --- |
+| `InventoryConcurrencyTest` | Race tests: 50–60 threads released at once on one SKU (same-size buys, uneven sizes, restocks mixed with purchases, first-time creates). No oversell, no lost update. |
+| `NegativeControlTest` | The race check can fail: a test-only read-then-write purchase passes it when buyers take turns and is caught when they race. |
+| `MultiInstanceRaceTest` | Two complete app instances on one Postgres, buyers split across both over real HTTP. The guarantee lives in the database, not in either JVM. |
+| `InventoryPropertyTest` | Kotest property test: 200 random sequences of receives and purchases agree with an in-memory model after every step. |
+| `InventoryLoadTest` | 50 HTTP clients on three hot SKUs for 20 s, stock kept near zero; the books balance exactly per SKU. Run with `./gradlew loadTest`. |
+| `InventoryRepositoryTest` | The `CHECK (quantity >= 0)` backstop rejects a direct write that would go negative. |
+
+`InventoryContractTest` separately checks every response of every endpoint against `inventory.yaml`.
 
 ## Build and run
 
@@ -114,7 +124,8 @@ container; there is nothing to install or configure by hand.
 
 ```sh
 ./gradlew bootRun   # start the API on http://localhost:8080 (Windows PowerShell: .\gradlew.bat bootRun)
-./gradlew test      # run all tests, each against a throwaway Postgres container
+./gradlew test      # run all tests except the load test, each against a throwaway Postgres container
+./gradlew loadTest  # HTTP load test, 20 s (options: -Dload.seconds=60 -Dload.clients=100)
 ./gradlew build     # compile, test and package build/libs/inventory-0.0.1-SNAPSHOT.jar
 ```
 
@@ -157,8 +168,9 @@ src/main/
     db/migration/             Flyway SQL migrations (V1__..., V2__...)
     openapi/inventory.yaml    The OpenAPI contract (source of truth)
 src/test/kotlin/com/robertwoolbright/inventory/
-  inventory/                  Feature tests: repository, service, controller, concurrency races
-  support/                    Shared test setup (the Testcontainers Postgres)
+  inventory/                  Feature tests: repository, service, controller, contract, races,
+                              negative control, multi-instance, property-based, load
+  support/                    Shared test setup (Testcontainers Postgres, race helper, HTTP client)
 .claude/                 Claude Code configuration (hooks, agents, skills) — see below
 CLAUDE.md                Project memory and coding standards for Claude Code
 docs/

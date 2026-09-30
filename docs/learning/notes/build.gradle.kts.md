@@ -108,6 +108,7 @@ dependencies {
     developmentOnly("org.springframework.boot:spring-boot-docker-compose")
     runtimeOnly("org.postgresql:postgresql")
     testImplementation(...)
+    ...
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 ```
@@ -161,7 +162,7 @@ property module (also 2026-09-30) is the same story: not in the BOM, so it's pin
 | `spring-boot-testcontainers` | `@ServiceConnection`, which turns a running container into DataSource settings. |
 | `kotlin-test-junit5` | `kotlin.test` assertions (`assertEquals`, `assertFailsWith`) backed by JUnit Jupiter. The artifact keeps its old `junit5` name, but it runs fine on JUnit 6. |
 | `testcontainers-junit-jupiter`, `testcontainers-postgresql` | Start a real Postgres in Docker for tests. |
-| `openapi-request-validator-mockmvc` (Atlassian, `3.0.0`) | Checks MockMvc responses against `inventory.yaml` in [InventoryContractTest.kt](test/inventory/InventoryContractTest.kt.md). Not managed by Spring Boot's BOM, so it carries an explicit version. Formerly `swagger-request-validator-mockmvc`; 3.0 is built for Spring 7 and Java 21. It brings Jackson 2 along (`com.fasterxml.jackson`), which lives in different packages from the app's Jackson 3 (`tools.jackson`), so the two don't clash. |
+| `openapi-request-validator-mockmvc` (Atlassian, `3.0.0`) | Checks MockMvc responses against `inventory.yaml` in [InventoryContractTest.kt](test/inventory/InventoryContractTest.kt.md). Not managed by Spring Boot's BOM, so it carries an explicit version. Formerly `swagger-request-validator-mockmvc`; 3.0 is built for Spring 7 and Java 21. It brings Jackson 2 along (`com.fasterxml.jackson`), which lives in different packages from the app's Jackson 3 (`tools.jackson`), so the two don't clash. (The one package they share on purpose is `com.fasterxml.jackson.annotation`: Jackson 3 still uses the 2.x annotations.) |
 | `kotest-property` (`6.2.5`) | Generators (`Arb`) and `checkAll` for [InventoryPropertyTest.kt](test/inventory/InventoryPropertyTest.kt.md). Only the property module: the tests stay JUnit tests, run by the usual engine, instead of Kotest specs with Kotest's own runner. Chosen over jqwik (Java-first, in maintenance mode). |
 | `junit-platform-launcher` | Gradle 9 no longer bundles the JUnit Platform launcher; it has to be on the test runtime classpath. |
 
@@ -213,9 +214,72 @@ normally erased at runtime, but an `inline` function can mark its type parameter
 use it as a real class. So you write `withType<Test>` instead of Java's
 `withType(Test.class)`. The trailing lambda then configures every `Test` task.
 
+### A separate task for the load test
+
+```kotlin
+// Why: the load test runs for a fixed time (20 s by default), too slow for every build, so it has
+// its own task. Considered always running it: that would make every `./gradlew build` slower.
+tasks.test {
+    useJUnitPlatform { excludeTags("load") }
+}
+
+// Runs only the @Tag("load") tests: ./gradlew loadTest [-Dload.seconds=60 -Dload.clients=100]
+tasks.register<Test>("loadTest") {
+    description = "Runs the HTTP load test against the real app."
+    group = "verification"
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform { includeTags("load") }
+    shouldRunAfter(tasks.test)
+    // Why: a load test is a measurement; rerun it every time instead of reusing the last result.
+    outputs.upToDateWhen { false }
+    testLogging.showStandardStreams = true
+    for (key in listOf("load.seconds", "load.clients")) {
+        providers.systemProperty(key).orNull?.let { systemProperty(key, it) }
+    }
+}
+```
+
+Added 2026-09-30 for [InventoryLoadTest.kt](test/inventory/InventoryLoadTest.kt.md) (Robert chose a
+separate task over running it in every build).
+
+**JUnit: tags.** `@Tag("load")` on a test class labels it. `excludeTags("load")` keeps it out of
+the normal `test` task; `includeTags("load")` makes the new task run *only* tagged tests.
+
+**Gradle: registering a task.** `tasks.register<Test>("loadTest") { ... }` creates a second task of
+the same type as `test`. A new `Test` task doesn't know where the tests are, so it gets the test
+source set's compiled classes (`testClassesDirs`) and classpath. `register` is *lazy*: the block
+only runs if the task is actually needed. (The first version used
+`val loadTest by tasks.registering(Test::class)`. With `--warning-mode all`, Gradle 9.7.1 reported:
+"The 'val name by registering(Type::class) { }' property delegate syntax has been deprecated. This
+is scheduled to be removed in Gradle 10. Use 'val element = register<Type>(name) { }' instead.")
+
+**Gradle: `description` and `group`.** What `./gradlew tasks` shows: `loadTest` is listed under
+"Verification tasks" next to `test`, with that description.
+
+**Gradle: `shouldRunAfter(tasks.test)`.** If both are requested (`./gradlew test loadTest`), run the
+fast tests first. Unlike `dependsOn`, it doesn't make `loadTest` run `test` on its own.
+
+**Gradle: `testLogging.showStandardStreams = true`.** Gradle normally swallows what tests print.
+This shows it, which is how the load test's `println` summary reaches the console.
+
+**Gradle: `outputs.upToDateWhen { false }`.** Gradle normally skips a task whose inputs haven't
+changed ("UP-TO-DATE"). For a measurement you want a fresh run every time.
+
+**Gradle: passing `-D` through.** `./gradlew loadTest -Dload.seconds=60` sets a property in *Gradle's*
+JVM, but tests run in a separate JVM. The `for (key in listOf(...))` loop handles
+each supported option; `providers.systemProperty(key).orNull` reads it (null if not given), and
+`systemProperty(key, it)` forwards it to the test JVM. `?.let { }` only runs when
+it's there, so the test's defaults apply otherwise.
+
+**Kotlin: `tasks.test { }`.** Configures the existing `test` task. The `withType<Test>` block
+above still applies to both tasks; this adds the tag filter to one of them.
+
 ## Check your understanding
 
 - Why does `postgresql` use `runtimeOnly` and not `implementation`? What would break if it were `compileOnly`?
 - Remove `kotlin("plugin.spring")`. Which kind of class would Spring fail on, and why?
 - `spring-boot-starter-validation` has no version in this file. Where does Gradle get one, and how would you check which it picked?
+- How does `./gradlew loadTest -Dload.seconds=60` reach the test, which runs in a different JVM?
+- Why does `./gradlew test` not run `InventoryLoadTest`, and what would happen if the `tasks.test { }` block were removed?
 - What does `-Xjsr305=strict` change about a Java method annotated `@Nullable String find()` when called from Kotlin?

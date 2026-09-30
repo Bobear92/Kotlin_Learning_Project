@@ -27,7 +27,7 @@ and `/walkthrough` add rows as new concepts come up.
 | Backtick function names | `` fun `reads like a sentence`() `` for test names | [InventoryRepositoryTest.kt](notes/test/inventory/InventoryRepositoryTest.kt.md) |
 | `kotlin.test` assertions | `assertEquals`, `assertTrue`, `assertFailsWith<T> { }` | [InventoryRepositoryTest.kt](notes/test/inventory/InventoryRepositoryTest.kt.md) |
 | Extension functions | `fun MockMvc.get(...)`: a function added to a class from outside it | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
-| Raw strings `"""` | Multi-line strings without escaping; `trimIndent()` to strip indentation | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
+| Raw strings `"""` | Multi-line strings without escaping; `trimIndent()` to strip indentation, `trimMargin()` to strip up to a `\|` margin marker (see [InventoryLoadTest.kt](notes/test/inventory/InventoryLoadTest.kt.md#the-summary)) | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
 | Primary constructor properties | `class X(private val dep: Dep)`: declares and assigns a property in the constructor | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
 | Read-only `List` vs `MutableList` | `List` has no `add`/`remove`; callers get a snapshot | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
 | Lambdas, `_` and SAM conversion | `{ rs, _ -> ... }` stands in for Java's single-method `RowMapper`; `_` = unused parameter | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
@@ -80,6 +80,12 @@ and `/walkthrough` add rows as new concepts come up.
 | Nested and private classes | A `private sealed interface` / `private class` inside a test class, visible only there | [InventoryPropertyTest.kt](notes/test/inventory/InventoryPropertyTest.kt.md) |
 | `lateinit var` and `::x.isInitialized` | A non-null `var` assigned after construction; reading it early throws; `isInitialized` checks first | [MultiInstanceRaceTest.kt](notes/test/inventory/MultiInstanceRaceTest.kt.md) |
 | `@JvmStatic` | Also emits a real static method for a companion-object function; JUnit's `@BeforeAll`/`@AfterAll` need one | [MultiInstanceRaceTest.kt](notes/test/inventory/MultiInstanceRaceTest.kt.md) |
+| `use { }` | Closes an `AutoCloseable` after the block, even on an exception: Java's try-with-resources | [InventoryLoadTest.kt](notes/test/inventory/InventoryLoadTest.kt.md) |
+| Function references `Int::plus` | Pass an existing function or operator where a lambda is expected (Java: `Integer::sum`) | [InventoryLoadTest.kt](notes/test/inventory/InventoryLoadTest.kt.md) |
+| Local functions | A `fun` declared inside another function, able to use its local variables | [InventoryLoadTest.kt](notes/test/inventory/InventoryLoadTest.kt.md) |
+| `associate { a to b }` | Builds a `Map` from a list, one `Pair` per element | [InventoryLoadTest.kt](notes/test/inventory/InventoryLoadTest.kt.md) |
+| `forEachIndexed`, `none { }` | Loop with the index as well as the element; `none` is true when no element matches (the opposite of `any`) | [InventoryPropertyTest.kt](notes/test/inventory/InventoryPropertyTest.kt.md), [OversellAssertions.kt](notes/test/inventory/OversellAssertions.kt.md) |
+| `Callable { }` (SAM conversion picks an overload) | Naming the Java interface in front of a lambda chooses `submit(Callable)` over `submit(Runnable)`, so the task returns a value | [Race.kt](notes/test/support/Race.kt.md) |
 | `return` and a line break | A line break after a bare `return` ends the statement; the value has to start on the same line | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md#purchaseinventory-one-branch-per-outcome) |
 
 ## Spring
@@ -127,9 +133,13 @@ and `/walkthrough` add rows as new concepts come up.
 | Negative control | Run the check against deliberately broken code and assert it fails, proving the check can detect the bug | [NegativeControlTest.kt](notes/test/inventory/NegativeControlTest.kt.md) |
 | Contract validation (OpenAPI) | Atlassian's validator checks a MockMvc response's status, content type and body against `inventory.yaml`; plugged in as a `ResultMatcher` via `match(...)` | [InventoryContractTest.kt](notes/test/inventory/InventoryContractTest.kt.md) |
 | Property-based / model-based testing | Generate random inputs (`Arb`), check a rule for all of them (`checkAll`), shrink a failure to the smallest case; compare the real code with a simple model | [InventoryPropertyTest.kt](notes/test/inventory/InventoryPropertyTest.kt.md) |
-| JUnit skips non-`Unit` tests | `fun t() = runBlocking { ... }` returns a value, so JUnit silently ignores it; use a block body | [InventoryPropertyTest.kt](notes/test/inventory/InventoryPropertyTest.kt.md) |
+| JUnit skips non-`Unit` tests | `fun t() = runBlocking { ... }` returns a value, so JUnit doesn't run it (at most a hidden discovery warning); use a block body | [InventoryPropertyTest.kt](notes/test/inventory/InventoryPropertyTest.kt.md) |
 | Several app instances in one test | `SpringApplicationBuilder(...).properties("server.port=0", ...).run()` twice: two contexts, two Tomcats, one database | [MultiInstanceRaceTest.kt](notes/test/inventory/MultiInstanceRaceTest.kt.md) |
 | JDK `HttpClient` | `java.net.http`: thread-safe client, `HttpRequest` builder, `send(..., BodyHandlers.ofString())`; real HTTP instead of MockMvc | [InventoryHttpClient.kt](notes/test/support/InventoryHttpClient.kt.md) |
+| Virtual threads (Java 21) | `Executors.newVirtualThreadPerTaskExecutor()`: cheap JVM-managed threads, fine by the thousands for blocking I/O | [InventoryLoadTest.kt](notes/test/inventory/InventoryLoadTest.kt.md) |
+| `WebEnvironment.RANDOM_PORT` + `@LocalServerPort` | `@SpringBootTest` with a real Tomcat on a free port, for real-HTTP tests | [InventoryLoadTest.kt](notes/test/inventory/InventoryLoadTest.kt.md) |
+| JUnit tags + a custom Gradle `Test` task | `@Tag("load")`, `excludeTags` on `test`, `tasks.register<Test>("loadTest")` with `includeTags` | [build.gradle.kts](notes/build.gradle.kts.md#a-separate-task-for-the-load-test) |
+| Latency percentiles | p95 = 95% of requests were at least this fast; says more than an average | [InventoryLoadTest.kt](notes/test/inventory/InventoryLoadTest.kt.md) |
 | Request processing order | Routing → `@RequestBody` (Content-Type, then Jackson) → `@Valid` → the handler function; a bad body is a `400` before any database lookup could give a `404` | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md#post-inventoryskuidpurchase) |
 | `@PostMapping` + `@RequestBody` | Map a POST; Jackson reads the JSON body into a class through its primary constructor | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
 | `@Valid` + Bean Validation (`@Min`) | Constraints on a request class run only when the parameter has `@Valid`; failures throw `MethodArgumentNotValidException` | [InventoryQuantity.kt](notes/main/inventory/InventoryQuantity.kt.md) |

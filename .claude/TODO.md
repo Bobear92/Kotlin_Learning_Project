@@ -69,6 +69,13 @@ and checks items off as they are done. Newest decisions are recorded in the READ
       (404 for missing SKU done 2026-09-27 via `InventoryExceptionHandler`; POST's four 400s done 2026-09-28; purchase's 400/404 done 2026-09-29)
 - [ ] Decide whether error responses should declare `charset=UTF-8` (the contract validator accepts `text/plain;charset=UTF-8`, checked 2026-09-30): today `Content-Type: text/plain` has no charset while the body is UTF-8 (seen with `curl` on 2026-09-27; only matters for non-ASCII SKUs)
 
+## Working notes
+
+- 2026-09-30, branch `test/oversell-hardening`: one testing `/feature` covering every open test-plan item
+  plus the contract-validation test. Decided (Robert): test-only naive repository, load test as JUnit +
+  `HttpClient` in a separate `./gradlew loadTest`, Kotest property for property tests. All parts done
+  (suite 124/124 + `loadTest`); README test claims match. Next: walkthrough, then `/ship`.
+
 ## Oversell protection: test plan
 
 **Invariant: a purchase must never oversell, even when requests arrive at the same moment.**
@@ -94,18 +101,14 @@ class of bug. Each item below is also a teaching topic for a walkthrough.
 - [x] **New-SKU creation race.** Concurrent first-time `POST`s for a SKU that doesn't exist yet.
       All succeed, no duplicate-key errors, final = sum of all quantities.
       (`InventoryConcurrencyTest`, plus a lost-update race on an existing SKU; green with `addStock`, 2026-09-28)
-- [ ] **Repeat to flush out flakiness.** Run the race tests many times (`@RepeatedTest`), since
+- [x] **Repeat to flush out flakiness.** Run the race tests many times (`@RepeatedTest`), since
       concurrency bugs are intermittent. (all five races use `@RepeatedTest(5)`, 2026-09-29; raise the count
-      or add a stress profile if "many times" should mean more)
-- [x] **Negative control.** Temporarily swap in a naive read-then-write implementation and show
-      the race test *fails*. This proves the test can actually detect an oversell.
-      **In progress 2026-09-30** on `test/oversell-hardening` (one testing `/feature` covering every open item
-      below, plus the contract-validation test). Decided (Robert): test-only `NaiveInventoryRepository` in
-      `src/test` (Robert writes it), forced interleaving with a `CyclicBarrier`; load test = JUnit + `HttpClient`
-      tagged `load`, run by a separate `./gradlew loadTest`; property tests = Kotest property. Done: `race()`
-      moved to `support/Race.kt`, shared `assertNoOversell` in `OversellAssertions.kt`, `NegativeControlTest` written.
-      Done: Robert's `NaiveInventoryRepository`; both negative-control tests green, full suite 100/100 (2026-09-30).
-      Contract-validation test done (2026-09-30). Property-based test done (2026-09-30). Multi-instance race done (2026-09-30). Next: HTTP load test.
+      or add a stress profile if "many times" should mean more. Decided 2026-09-30: keep 5 in the normal build;
+      the `loadTest` task supplies the volume)
+- [x] **Negative control.** Show that the race check fails on a naive read-then-write purchase,
+      proving the test can actually detect an oversell. Done 2026-09-30: a permanent, test-only
+      `NaiveInventoryRepository` (Robert) runs through the shared `race()` and `assertNoOversell`;
+      a `CyclicBarrier` forces the lost update on every run (`NegativeControlTest`).
 
 ### Database backstop
 - [x] Test that the `CHECK (quantity >= 0)` constraint rejects a direct update that would go
@@ -118,8 +121,11 @@ class of bug. Each item below is also a teaching topic for a walkthrough.
       (`MultiInstanceRaceTest`: two `SpringApplicationBuilder` apps on random ports, one Testcontainers Postgres,
       buyers split over real HTTP via `support/InventoryHttpClient`; purchase race + cross-instance restock/purchase
       balance, `@RepeatedTest(3)`, green 2026-09-30)
-- [ ] **HTTP load test.** Gatling (it has a Kotlin DSL) or k6 against the running app: sustained
+- [x] **HTTP load test.** Gatling (it has a Kotlin DSL) or k6 against the running app: sustained
       concurrent purchases on hot SKUs, then check the final quantities with `GET /inventory`.
+      (Chosen instead: JUnit + JDK `HttpClient` on virtual threads, `InventoryLoadTest` tagged `load`, run by
+      `./gradlew loadTest`, excluded from `./gradlew test`; 50 clients x 20 s on 3 hot SKUs, exact per-SKU balance,
+      prints throughput and p50/p95/p99. 5 s run: ~2,400 req/s, green 2026-09-30)
 
 ### Model-based (stretch)
 - [x] Property-based test (e.g. Kotest property testing): random sequences of receive and
