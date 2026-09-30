@@ -50,13 +50,15 @@ and `/walkthrough` add rows as new concepts come up.
 | Nullable values from Java | `Throwable.message` is `String?` because `getMessage()` may return null | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
 | Default arguments | `fun f(x: T = default)`: callers may leave the argument out; replaces Java overloads | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
 | Array literals in annotations | `@ValueSource(ints = [0, -5])`; Java writes `{0, -5}` | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
-| Generic functions and function types | `fun <T> race(action: (Int) -> T)`: a type parameter plus a parameter that holds a function | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
-| Ranges `..` and `until` | `1..n` includes `n`, `0 until n` excludes it; both work with `map`, `sum` | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
-| `runCatching` and `Result` | Runs a block and captures success or exception as a value, nothing thrown | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
+| Generic functions and function types | `fun <T> race(action: (Int) -> T)`: a type parameter plus a parameter that holds a function | [Race.kt](notes/test/support/Race.kt.md) |
+| Ranges `..` and `until` | `1..n` includes `n`, `0 until n` excludes it; both work with `map`, `sum` | [Race.kt](notes/test/support/Race.kt.md) |
+| `runCatching` and `Result` | Runs a block and captures success or exception as a value, nothing thrown | [Race.kt](notes/test/support/Race.kt.md) |
 | Implicit lambda parameter `it` | A one-parameter lambda can leave the parameter out and use `it` | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
 | Safe-call operator `?.` | `a?.b` is `null` instead of an NPE when `a` is `null`; chains end in one `?:` fallback | [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md) |
 | `require` / `check` | `require(cond) { msg }` throws `IllegalArgumentException`; the message lambda runs only on failure | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
 | Block body vs expression body | `= expr` holds one expression; two steps (check, then act) read better as `{ }` with an explicit `return` | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md) |
+| `= { ... }` pitfall | With `=`, braces make a lambda: the function returns a function instead of running the code | [NaiveInventoryRepository.kt](notes/test/inventory/NaiveInventoryRepository.kt.md) |
+| `Unit` and `() -> Unit` | Kotlin's `void` as a real type; a no-argument function type stored in a property (Java: `Runnable`) | [NaiveInventoryRepository.kt](notes/test/inventory/NaiveInventoryRepository.kt.md) |
 | Class with no constructor parameters | `class E : RuntimeException("msg")`, created with `E()` | [AddStockOverflowException.kt](notes/main/inventory/error/AddStockOverflowException.kt.md) |
 | Sealed interfaces | `sealed interface` closes the list of implementations (same package + module), so a `when` over it can be exhaustive; Java 17's `sealed ... permits` | [PurchaseResult.kt](notes/main/inventory/PurchaseResult.kt.md) |
 | `object` and `data object` | A class with exactly one instance, used by name without `()`; `data` adds a readable `toString` | [PurchaseResult.kt](notes/main/inventory/PurchaseResult.kt.md) |
@@ -66,7 +68,8 @@ and `/walkthrough` add rows as new concepts come up.
 | `Int::class.java` vs `javaObjectType` | `.java` is the primitive `int.class`, `.javaObjectType` the boxed `Integer.class` (can hold `null`) | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
 | KDoc links `[Name]` | Square brackets in KDoc link to a declaration; Javadoc's `{@link}` | [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md) |
 | `when` with a subject, `is` and exhaustiveness | `when (val x = ...) { is A -> ...; B -> ... }`: type checks and equality; no `else` needed over a sealed type | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md#purchaseinventory-one-branch-per-outcome) |
-| `filterIsInstance<T>()` | Keeps the elements of type `T` and returns a `List<T>`: a smart cast for a whole list | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md#the-same-sku-purchase-race) |
+| `filterIsInstance<T>()` | Keeps the elements of type `T` and returns a `List<T>`: a smart cast for a whole list | [OversellAssertions.kt](notes/test/inventory/OversellAssertions.kt.md) |
+| `orEmpty()` | Turns a `null` `String?` into `""` so it can be used without a null check | [NegativeControlTest.kt](notes/test/inventory/NegativeControlTest.kt.md) |
 | `return` and a line break | A line break after a bare `return` ends the statement; the value has to start on the same line | [InventoryService.kt](notes/main/inventory/InventoryService.kt.md#purchaseinventory-one-branch-per-outcome) |
 
 ## Spring
@@ -109,7 +112,9 @@ and `/walkthrough` add rows as new concepts come up.
 | `@ParameterizedTest` + `@ValueSource` | One test method run once per supplied value, each reported separately | [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md) |
 | `@RepeatedTest` | Runs a test N times; used for intermittent concurrency bugs | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
 | Test transactions are per thread | A `@JdbcTest` rollback covers only the test thread; worker threads commit on their own connections | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
-| Start gate (`CountDownLatch`) | Hold N threads at one line, then release them together so they really overlap | [InventoryConcurrencyTest.kt](notes/test/inventory/InventoryConcurrencyTest.kt.md) |
+| Start gate (`CountDownLatch`) | Hold N threads at one line, then release them together so they really overlap | [Race.kt](notes/test/support/Race.kt.md) |
+| `CyclicBarrier` | N threads meet at `await()` and continue together; forces a chosen interleaving | [NegativeControlTest.kt](notes/test/inventory/NegativeControlTest.kt.md) |
+| Negative control | Run the check against deliberately broken code and assert it fails, proving the check can detect the bug | [NegativeControlTest.kt](notes/test/inventory/NegativeControlTest.kt.md) |
 | Request processing order | Routing → `@RequestBody` (Content-Type, then Jackson) → `@Valid` → the handler function; a bad body is a `400` before any database lookup could give a `404` | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md#post-inventoryskuidpurchase) |
 | `@PostMapping` + `@RequestBody` | Map a POST; Jackson reads the JSON body into a class through its primary constructor | [InventoryController.kt](notes/main/inventory/InventoryController.kt.md) |
 | `@Valid` + Bean Validation (`@Min`) | Constraints on a request class run only when the parameter has `@Valid`; failures throw `MethodArgumentNotValidException` | [InventoryQuantity.kt](notes/main/inventory/InventoryQuantity.kt.md) |

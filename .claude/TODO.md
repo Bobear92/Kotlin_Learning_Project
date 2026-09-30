@@ -96,8 +96,15 @@ class of bug. Each item below is also a teaching topic for a walkthrough.
 - [ ] **Repeat to flush out flakiness.** Run the race tests many times (`@RepeatedTest`), since
       concurrency bugs are intermittent. (all five races use `@RepeatedTest(5)`, 2026-09-29; raise the count
       or add a stress profile if "many times" should mean more)
-- [ ] **Negative control.** Temporarily swap in a naive read-then-write implementation and show
+- [x] **Negative control.** Temporarily swap in a naive read-then-write implementation and show
       the race test *fails*. This proves the test can actually detect an oversell.
+      **In progress 2026-09-30** on `test/oversell-hardening` (one testing `/feature` covering every open item
+      below, plus the contract-validation test). Decided (Robert): test-only `NaiveInventoryRepository` in
+      `src/test` (Robert writes it), forced interleaving with a `CyclicBarrier`; load test = JUnit + `HttpClient`
+      tagged `load`, run by a separate `./gradlew loadTest`; property tests = Kotest property. Done: `race()`
+      moved to `support/Race.kt`, shared `assertNoOversell` in `OversellAssertions.kt`, `NegativeControlTest` written.
+      Done: Robert's `NaiveInventoryRepository`; both negative-control tests green, full suite 100/100 (2026-09-30).
+      Next: contract-validation test.
 
 ### Database backstop
 - [x] Test that the `CHECK (quantity >= 0)` constraint rejects a direct update that would go
