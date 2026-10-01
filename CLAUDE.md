@@ -12,6 +12,15 @@ project to learn it properly, whatever happens with the interview. Every piece o
 code must work and come with study notes that teach it. Treat "can Robert explain every line of this in the
 follow-up interview?" as a requirement alongside passing the tests.
 
+## Current phase: panel interview prep (since 2026-10-01)
+
+The take-home passed. Next is a two-hour Zoom panel (hour 1: Architect + Senior Software Engineer; hour 2:
+Architect + Software Engineer). The goal now is for Robert to **present, defend and extend** this code live,
+without AI help. The prep plan is in [.claude/TODO.md](.claude/TODO.md) under "Panel interview prep", and the
+Q&A sheet is [docs/learning/interview-prep.md](docs/learning/interview-prep.md). In mock interviews and
+live-coding rehearsals, Claude plays the interviewer: ask, wait, then grade honestly. Give no hints until the
+answer is in.
+
 ## Who writes what: Robert codes, Claude coaches
 
 **Robert writes all production code**: everything under `src/main/` (Kotlin, SQL migrations,
