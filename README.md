@@ -197,6 +197,13 @@ In Windows PowerShell, call `curl.exe` instead of `curl`, and write the body as
 These outputs were checked on 2026-09-30 against a fresh clone of the repository
 (`git clone`, `./gradlew build`, `./gradlew bootRun`).
 
+**Postman.** [postman/Nuuly_Inventory.postman_collection.json](postman/Nuuly_Inventory.postman_collection.json)
+has 33 happy and unhappy calls across all four endpoints, each with assertions on status,
+content type and body. Import it into Postman and run the whole collection in order (later
+calls use stock that earlier ones created), or run it without Postman:
+`npx newman run postman/Nuuly_Inventory.postman_collection.json`. Each run uses fresh SKU ids,
+so it can be repeated against a running app. Checked on 2026-10-01: 100 of 100 assertions pass.
+
 `bootRun` starts Postgres from [compose.yaml](compose.yaml) automatically (Spring Boot's
 Docker Compose support) and stops it on shutdown. Tests don't use Compose; Testcontainers
 starts a fresh Postgres for them. No database URL or password needs configuring.
