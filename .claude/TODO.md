@@ -91,10 +91,27 @@ and checks items off as they are done. Newest decisions are recorded in the READ
 
 ## Submission
 
-- [ ] Robert reviews `docs/how-this-was-built.md` (it's written in his voice; confirm his background line)
-- [ ] Optional before the interview: finish the 2026-09-30 walkthrough (contract, property, HTTP client,
-      multi-instance, load tests)
-- [ ] Robert notifies the recruiter that the repository is ready
+- [x] Robert reviews `docs/how-this-was-built.md` (approved 2026-09-30)
+- [x] Robert notifies the recruiter that the repository is ready (sent 2026-09-30)
+- [x] Take-home passed: recruiter invited Robert to panel interviews (2026-10-01)
+
+## Panel interview prep
+
+Two-hour Zoom panel, date TBD (within ~2 weeks of 2026-10-01). Hour 1: Architect + Senior Software Engineer.
+Hour 2: Architect + Software Engineer. Expect: a tour of the code, "why" questions, "how would this change if..."
+design questions, possibly live changes, and questions about how AI was used.
+
+- [ ] Robert replies to Molly with available dates and times
+- [ ] Finish the 2026-09-30 testing walkthrough (contract, property, HTTP client, multi-instance, load tests)
+- [ ] Code tour: Robert can present the project in 5 minutes and in 15 minutes, screen-shared, without notes
+- [ ] Demo readiness: clean clone → Docker up → app running → Postman calls → CI run, rehearsed on Zoom screen share
+- [ ] Architect questions: add a "Design extensions" section to `interview-prep.md` (rentals and returns, reservations,
+      idempotent purchases, multiple warehouses, events/outbox, pagination, caching, auth, observability, scale-out)
+- [ ] Live-coding rehearsal: Robert adds a small change unaided, timed, with Claude as the interviewer (no hints)
+- [ ] Mock interviews: one per panel hour, logged with feedback
+- [ ] Kotlin/Spring beyond the project: coroutines, scope functions, extension functions, collections, transactions
+- [ ] AI-use story: a short, honest answer to "how did you use AI here?", backed by `how-this-was-built.md` and the audit
+- [ ] Questions for the panel (team, inventory domain, stack, on-call, how they use Kotlin)
 
 ## Oversell protection: test plan
 
