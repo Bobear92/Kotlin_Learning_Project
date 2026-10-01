@@ -47,4 +47,5 @@ from 01 each day in the order sessions were started.
 | [2026-09-29_05](2026-09-29/2026-09-29_05.md) | InventoryController step 6 | 2026-09-29 22:29 | 12 |
 | [2026-09-29_06](2026-09-29/2026-09-29_06.md) | InventoryService walkthrough | 2026-09-29 23:31 | 26 |
 | [2026-09-30_01](2026-09-30/2026-09-30_01.md) | Testing feature | 2026-09-30 15:37 | 38 |
-| [2026-10-01_01](2026-10-01/2026-10-01_01.md) | Happy and unhappy calls for 4 endpoints | 2026-10-01 17:07 | 9 |
+| [2026-10-01_01](2026-10-01/2026-10-01_01.md) | Happy and unhappy calls for 4 endpoints | 2026-10-01 17:07 | 10 |
+| [2026-10-01_02](2026-10-01/2026-10-01_02.md) | Panel interview prep | 2026-10-01 17:38 | 11 |
