@@ -107,6 +107,14 @@ design questions, possibly live changes, and questions about how AI was used.
 - [ ] Demo readiness: clean clone → Docker up → app running → Postman calls → CI run, rehearsed on Zoom screen share
 - [ ] Architect questions: add a "Design extensions" section to `interview-prep.md` (rentals and returns, reservations,
       idempotent purchases, multiple warehouses, events/outbox, pagination, caching, auth, observability, scale-out)
+  - [x] AWS hosting sketch: `docs/architecture/architecture.md` + "Architecture and production" prep questions (2026-10-01;
+        covers hosting, SQS receive with shipment dedup, caching, rentals/returns)
+- [ ] Architecture diagram rehearsal: Robert presents `docs/architecture/architecture.svg` on screen share
+  - [ ] 2-minute version: left to right, what each box is and why it's there
+  - [ ] Trace each flow out loud on the diagram: browse, add to cart, checkout, receive stock, return
+  - [ ] Q&A drill: Claude plays the architect and probes it (what fails if X goes down, why not write-through,
+        why SQS, why Fargate over Lambda/EKS, connection math, idempotency); grade answers, add gaps to the prep sheet
+  - [ ] Redraw it from memory (whiteboard or paper) in case the panel asks for a live sketch
 - [ ] Live-coding rehearsal: Robert adds a small change unaided, timed, with Claude as the interviewer (no hints)
 - [ ] Mock interviews: one per panel hour, logged with feedback
 - [ ] Kotlin/Spring beyond the project: coroutines, scope functions, extension functions, collections, transactions

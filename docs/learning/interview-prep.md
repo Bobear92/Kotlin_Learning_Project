@@ -672,3 +672,57 @@ single-app race tests but fail with two instances, because each JVM has its own 
 `MultiInstanceRaceTest` starts two full app contexts on one database and races buyers across both
 over HTTP to prove it. See [MultiInstanceRaceTest notes](notes/test/inventory/MultiInstanceRaceTest.kt.md).
 </details>
+
+## Architecture and production
+
+The full sketch, with a diagram, is in [docs/architecture/architecture.md](../architecture/architecture.md).
+
+### How would you host this on AWS?
+
+<details>
+<summary>Answer</summary>
+
+Route 53 and API Gateway (with WAF) in front of an experience layer, which calls the inventory service privately
+through an internal ALB. Both run on ECS Fargate, the inventory service as 2+ tasks across 2 availability zones,
+backed by RDS PostgreSQL Multi-AZ. Fargate because at ~100 TPS a cluster (EKS) is overkill, and Lambda means JVM
+cold starts plus a database connection per invocation. Running several tasks is safe because the oversell
+guarantee lives in Postgres, not in app memory: `MultiInstanceRaceTest` proves it.
+</details>
+
+### Fulfillment receives 500 units. How does that reach your database, and what if inventory is down?
+
+<details>
+<summary>Answer</summary>
+
+Never by writing to the tables directly: the inventory service owns its data, so its rules always run.
+Fulfillment publishes a "shipment received" message with a shipment ID to SQS. The inventory service consumes it
+and runs the same code as `POST /inventory/{skuId}`. If inventory is down, the messages wait in the queue.
+
+The shipment ID matters because receiving *adds* stock, and SQS can deliver a message twice. Inserting the ID into
+a `processed_shipments` table in the same transaction as the stock change makes a duplicate a no-op.
+</details>
+
+### Would you put a Redis cache in front of the inventory?
+
+<details>
+<summary>Answer</summary>
+
+Carts, yes: they're short-lived and a TTL handles abandonment. Inventory counts only when read traffic strains
+Postgres. At ~100 TPS a primary-key read is about a millisecond, and RDS bills per instance, not per query, so
+a cache would add cost.
+
+If I add one: cache-aside, delete the key on every write, short TTL. Not write-through, because the database write
+and the cache write aren't atomic: two purchases can update them in opposite orders and leave an old count cached.
+And a purchase never reads the cache: the atomic `UPDATE ... WHERE quantity >= :q` is the final check *and* the
+write. Checking first and then writing brings back the oversell race.
+</details>
+
+### Nuuly rents clothes. What does `quantity` mean for a garment that's out with a customer?
+
+<details>
+<summary>Answer</summary>
+
+`quantity` is units on hand and available to ship. Rented garments aren't counted. A return is restocked
+through the same receive path once it's inspected and cleaned. With more time, I'd track individual garments with
+a status (available, rented, cleaning) instead of a count.
+</details>
