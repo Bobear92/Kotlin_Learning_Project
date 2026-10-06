@@ -39,6 +39,21 @@ Request bodies are `{"quantity": <integer ≥ 1>}`. Success bodies are
 `{"skuId": "...", "quantity": <integer ≥ 0>}`. Error bodies are plain-text strings
 (`text/plain`), not JSON.
 
+## FAQ
+
+[docs/faq.md](docs/faq.md) answers common questions about how the service works and why it's built this
+way. It also has a short "start here" list.
+
+| Topic | Questions | Covers |
+| --- | --- | --- |
+| [Design and failure modes](docs/faq.md#design-and-failure-modes) | 9 | atomic SQL, row locks, overflow, why `CHECK (quantity >= 0)` isn't enough |
+| [API design and validation](docs/faq.md#api-design-and-validation) | 6 | what returns `400` vs `404`, and where the contract overrides REST convention |
+| [Kotlin](docs/faq.md#kotlin) | 8 | nullable types, `?:`, sealed results, `data class` |
+| [Spring](docs/faq.md#spring) | 6 | beans, exception handlers, what fails at compile time vs startup vs request |
+| [Database and migrations](docs/faq.md#database-and-migrations) | 1 | changing the schema with Flyway |
+| [Testing](docs/faq.md#testing) | 4 | what the tests cover, and how we know the race tests can catch an oversell |
+| [Architecture and production](docs/faq.md#architecture-and-production) | 4 | a hypothetical AWS setup, queues, caching, rentals |
+
 ## Tech stack
 
 | Choice | Why |
@@ -247,6 +262,7 @@ src/test/kotlin/com/robertwoolbright/inventory/
 .claude/                 Claude Code configuration (hooks, agents, skills) — see below
 CLAUDE.md                Project memory and coding standards for Claude Code
 docs/
+  faq.md                 Design FAQ: common questions about the service, with answers
   learning/
     notes/               Study notes: one per source file, explaining it chunk by chunk
     walkthroughs/        Logs of each /walkthrough session
@@ -277,8 +293,8 @@ teaching lives next to it in study notes:
   line with Claude, answer check-your-understanding questions, and log the session in
   [docs/learning/walkthroughs/](docs/learning/walkthroughs/). New concepts are indexed in
   [docs/learning/kotlin-concepts.md](docs/learning/kotlin-concepts.md).
-- **Interview prep.** Questions I expect in the follow-up interview, with folded answers, grow
-  during each walkthrough in [docs/learning/interview-prep.md](docs/learning/interview-prep.md).
+- **Design FAQ.** Questions about the design, with short answers, grow during each walkthrough in
+  [docs/faq.md](docs/faq.md). I also use it to prepare for the follow-up interview.
 
 ## AI-assisted development
 
