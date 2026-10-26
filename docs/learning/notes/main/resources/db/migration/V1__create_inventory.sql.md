@@ -178,7 +178,7 @@ task *is* the running server, and it only finishes when you press Ctrl+C. Look i
 Then use a second terminal:
 
 ```sh
-docker exec -it nuuly_inventory_assessment-postgres-1 psql -U <user> -d <db>
+docker exec -it kotlin_learning_project-postgres-1 psql -U <user> -d <db>
 ```
 
 ```sql

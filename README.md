@@ -1,6 +1,6 @@
 # Nuuly Inventory API
 
-[![Tests](https://github.com/Bobear92/Nuuly_Inventory_Assessment/actions/workflows/tests.yml/badge.svg)](https://github.com/Bobear92/Nuuly_Inventory_Assessment/actions/workflows/tests.yml)
+[![Tests](https://github.com/Bobear92/Kotlin_Learning_Project/actions/workflows/tests.yml/badge.svg)](https://github.com/Bobear92/Kotlin_Learning_Project/actions/workflows/tests.yml)
 
 A small inventory-management REST API built for the Nuuly services assessment. It
 receives stock by SKU, processes purchases without overselling, and reports current
