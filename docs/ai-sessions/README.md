@@ -17,15 +17,6 @@ from 01 each day in the order sessions were started.
 
 | Session | Title | Started (UTC) | User prompts |
 |---|---|---|---|
-| [2026-09-23_01](2026-09-23/2026-09-23_01.md) | Nuuly assessment session history setup | 2026-09-23 13:38 | 3 |
-| [2026-09-23_02](2026-09-23/2026-09-23_02.md) | Testing new entry organization method | 2026-09-23 13:51 | 2 |
-| [2026-09-23_03](2026-09-23/2026-09-23_03.md) | Nuuly inventory Kotlin master class | 2026-09-23 14:05 | 8 |
-| [2026-09-23_04](2026-09-23/2026-09-23_04.md) | Project structure and scaffolding | 2026-09-23 14:44 | 22 |
-| [2026-09-24_01](2026-09-24/2026-09-24_01.md) | Inventory list endpoint | 2026-09-24 16:13 | 20 |
-| [2026-09-24_02](2026-09-24/2026-09-24_02.md) | Continue with step 2 | 2026-09-24 17:31 | 7 |
-| [2026-09-24_03](2026-09-24/2026-09-24_03.md) | Inventory item step 3 | 2026-09-24 21:03 | 23 |
-| [2026-09-24_04](2026-09-24/2026-09-24_04.md) | InventoryRepository step 4 | 2026-09-25 03:47 | 8 |
-| [2026-09-25_01](2026-09-25/2026-09-25_01.md) | InventoryService step 5 | 2026-09-25 14:04 | 4 |
 | [2026-09-25_02](2026-09-25/2026-09-25_02.md) | Inventory item step 6 | 2026-09-25 14:59 | 29 |
 | [2026-09-27_01](2026-09-27/2026-09-27_01.md) | Inventory skuId endpoint | 2026-09-27 18:09 | 10 |
 | [2026-09-27_02](2026-09-27/2026-09-27_02.md) | InventoryRepository step 2 | 2026-09-27 18:54 | 6 |
@@ -48,4 +39,7 @@ from 01 each day in the order sessions were started.
 | [2026-09-29_06](2026-09-29/2026-09-29_06.md) | InventoryService walkthrough | 2026-09-29 23:31 | 26 |
 | [2026-09-30_01](2026-09-30/2026-09-30_01.md) | Testing feature | 2026-09-30 15:37 | 38 |
 | [2026-10-01_01](2026-10-01/2026-10-01_01.md) | Happy and unhappy calls for 4 endpoints | 2026-10-01 17:07 | 10 |
-| [2026-10-01_02](2026-10-01/2026-10-01_02.md) | Panel interview prep | 2026-10-01 17:38 | 11 |
+| [2026-10-01_02](2026-10-01/2026-10-01_02.md) | Panel interview prep | 2026-10-01 17:38 | 12 |
+| [2026-10-05_01](2026-10-05/2026-10-05_01.md) | Panel interview prep | 2026-10-05 21:28 | 14 |
+| [2026-10-08_01](2026-10-08/2026-10-08_01.md) | Start service for postman and interview | 2026-10-08 17:27 | 1 |
+| [2026-10-22_01](2026-10-22/2026-10-22_01.md) | D&D app | 2026-10-22 19:45 | 2 |

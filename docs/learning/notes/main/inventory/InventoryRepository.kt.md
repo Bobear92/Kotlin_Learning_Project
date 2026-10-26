@@ -307,7 +307,7 @@ and two `widget` rows existed, `singleOrNull()` would return `null`, the service
 twice. The bug would be silent. Swapping in `.single()` would make it loud (a 500), but `.single()`
 also throws on zero rows, the normal "not found" case. A lookup that allowed duplicates would need
 all three cases spelled out: empty → `null`, one → the item, more → an error. The real fix is
-keeping the primary key. See [interview prep](../../../interview-prep.md#what-happens-if-two-rows-ever-share-the-same-sku).
+keeping the primary key. See the [design FAQ](../../../../faq.md#what-happens-if-two-rows-ever-share-the-same-sku).
 
 **Why not `JdbcClient`'s own `.optional()`:** the query spec also has `.optional()`, which returns a
 Java `Optional<InventoryItem>`. Kotlin code would then convert it with `.orElse(null)` or

@@ -36,7 +36,7 @@ services:
 ```
 
 A compose file lists *services*, i.e. containers to run. `postgres` is just the service's name
-(it also names the container: `nuuly_inventory_assessment-postgres-1`). Spring doesn't care about
+(it also names the container: `kotlin_learning_project-postgres-1`). Spring doesn't care about
 the name. It recognizes the service by its **image**: a `postgres` image tells it this is a
 Postgres database and that it should create JDBC connection details for it.
 

@@ -1,17 +1,80 @@
-# Interview prep
+# Design FAQ
 
-Questions a reviewer might ask in the follow-up interview, with short answers I should be able to
-give out loud. Answers are folded: try each question first, then open it to check.
+Questions about how the inventory service works and why it's built the way it is, each with a short
+answer. The answers link to the [study notes](learning/notes/README.md), which walk through the code
+line by line.
 
-New questions are added during walkthroughs when a topic looks interview-worthy. Longer
-explanations live in the [study notes](notes/README.md); each answer links to them.
+**New to the service? Start with these four:**
+
+1. [Why one upsert instead of "look up the row, then insert or update"?](#why-one-upsert-instead-of-look-up-the-row-then-insert-or-update): how stock is added safely.
+2. [Your table has `CHECK (quantity >= 0)`. Isn't that enough to prevent overselling?](#your-table-has-check-quantity--0-isnt-that-enough-to-prevent-overselling): how a purchase never oversells.
+3. [How does your API validate input?](#how-does-your-api-validate-input): what gets a `400`, and why.
+4. [Why does the purchase stay correct with several app instances?](#why-does-the-purchase-stay-correct-with-several-app-instances): why it holds when the service is scaled out.
+
+## Contents
+
+**Design and failure modes**
+
+- [What happens if two rows ever share the same SKU?](#what-happens-if-two-rows-ever-share-the-same-sku)
+- [Why does the repository return `null` for a missing SKU instead of throwing?](#why-does-the-repository-return-null-for-a-missing-sku-instead-of-throwing)
+- [How do you prevent SQL injection?](#how-do-you-prevent-sql-injection)
+- [Why a custom `SkuNotFoundException` instead of Spring's `ResponseStatusException`?](#why-a-custom-skunotfoundexception-instead-of-springs-responsestatusexception)
+- [What happens if the database is down during `GET /inventory`?](#what-happens-if-the-database-is-down-during-get-inventory)
+- [Why one upsert instead of "look up the row, then insert or update"?](#why-one-upsert-instead-of-look-up-the-row-then-insert-or-update)
+- [Doesn't that row lock slow the service down?](#doesnt-that-row-lock-slow-the-service-down)
+- [Why is the overflow guard written as `current <= MAX - new`?](#why-is-the-overflow-guard-written-as-current--max---new)
+- [Your table has `CHECK (quantity >= 0)`. Isn't that enough to prevent overselling?](#your-table-has-check-quantity--0-isnt-that-enough-to-prevent-overselling)
+
+**API design and validation**
+
+- [How does your API validate input?](#how-does-your-api-validate-input)
+- [Stock can be 0. Why does the request require a quantity of at least 1?](#stock-can-be-0-why-does-the-request-require-a-quantity-of-at-least-1)
+- [How would you add a new product that has no stock yet?](#how-would-you-add-a-new-product-that-has-no-stock-yet)
+- [`@Valid` already rejects 0. Why check again with `require` in the service?](#valid-already-rejects-0-why-check-again-with-require-in-the-service)
+- [Creating a SKU returns 200, not 201, and a wrong Content-Type is 400, not 415. Why?](#creating-a-sku-returns-200-not-201-and-a-wrong-content-type-is-400-not-415-why)
+- [A purchase has an invalid quantity *and* a SKU that doesn't exist. `400` or `404`?](#a-purchase-has-an-invalid-quantity-and-a-sku-that-doesnt-exist-400-or-404)
+
+**Kotlin**
+
+- [What does the `?` in `InventoryItem?` mean, and how is it different from Java's `Optional`?](#what-does-the--in-inventoryitem-mean-and-how-is-it-different-from-javas-optional)
+- [Walk me through `class SkuNotFoundException(skuId: String) : RuntimeException("SKU not found: $skuId")`](#walk-me-through-class-skunotfoundexceptionskuid-string--runtimeexceptionsku-not-found-skuid)
+- [`private val`, `val`, or a plain parameter: what's the difference, and why are the layers `private val`?](#private-val-val-or-a-plain-parameter-whats-the-difference-and-why-are-the-layers-private-val)
+- [What is `?:`, and how does `getInventory` return a non-null `InventoryItem` from a nullable lookup?](#what-is--and-how-does-getinventory-return-a-non-null-inventoryitem-from-a-nullable-lookup)
+- [What if the service just passed the `null` up and the controller returned `InventoryItem?`?](#what-if-the-service-just-passed-the-null-up-and-the-controller-returned-inventoryitem)
+- [Why is the row mapper a lambda and not `query(InventoryItem::class.java)`?](#why-is-the-row-mapper-a-lambda-and-not-queryinventoryitemclassjava)
+- [What does `data class` give you, and does it make the class immutable?](#what-does-data-class-give-you-and-does-it-make-the-class-immutable)
+- [Why does `removeStock` return a sealed `PurchaseResult` instead of `InventoryItem?` or throwing?](#why-does-removestock-return-a-sealed-purchaseresult-instead-of-inventoryitem-or-throwing)
+
+**Spring**
+
+- [Two requests arrive at the same time. How many controller objects are there?](#two-requests-arrive-at-the-same-time-how-many-controller-objects-are-there)
+- [What happens if you remove `@Service` from `InventoryService`?](#what-happens-if-you-remove-service-from-inventoryservice)
+- [How does a `SkuNotFoundException` thrown in the service become a 404?](#how-does-a-skunotfoundexception-thrown-in-the-service-become-a-404)
+- [Why don't your handlers send Spring's `ex.message` to the client?](#why-dont-your-handlers-send-springs-exmessage-to-the-client)
+- [When does each kind of mistake surface: compile time, startup, or the first request?](#when-does-each-kind-of-mistake-surface-compile-time-startup-or-the-first-request)
+- [How would you deploy to a different database without changing any files?](#how-would-you-deploy-to-a-different-database-without-changing-any-files)
+
+**Database and migrations**
+
+- [You need a new `created_at` column. What do you do?](#you-need-a-new-created_at-column-what-do-you-do)
+
+**Testing**
+
+- [How do you know `GET /inventory/{skuId}` works? What do the tests actually cover?](#how-do-you-know-get-inventoryskuid-works-what-do-the-tests-actually-cover)
+- [If `findBySkuId` lost its `WHERE` clause, which repository tests would fail?](#if-findbyskuid-lost-its-where-clause-which-repository-tests-would-fail)
+- [How do you know your race tests would actually catch an oversell?](#how-do-you-know-your-race-tests-would-actually-catch-an-oversell)
+- [Why does the purchase stay correct with several app instances?](#why-does-the-purchase-stay-correct-with-several-app-instances)
+
+**Architecture and production**
+
+- [How would you host this on AWS?](#how-would-you-host-this-on-aws)
+- [Fulfillment receives 500 units. How does that reach your database, and what if inventory is down?](#fulfillment-receives-500-units-how-does-that-reach-your-database-and-what-if-inventory-is-down)
+- [Would you put a Redis cache in front of the inventory?](#would-you-put-a-redis-cache-in-front-of-the-inventory)
+- [Nuuly rents clothes. What does `quantity` mean for a garment that's out with a customer?](#nuuly-rents-clothes-what-does-quantity-mean-for-a-garment-thats-out-with-a-customer)
 
 ## Design and failure modes
 
 ### What happens if two rows ever share the same SKU?
-
-<details>
-<summary>Answer</summary>
 
 `findBySkuId` ends in `.list().singleOrNull()`. With two rows, `singleOrNull()` returns `null`
 without throwing. The service then throws `SkuNotFoundException`, and the client gets
@@ -37,27 +100,20 @@ If `sku_id` ever stopped being unique, the lookup would need reworking:
 | `[a]` | `a` | `a` | `a` |
 | `[a, b]` | **`null`**, silently | throws | `a`, silently |
 
-Notes: [InventoryRepository.kt, `singleOrNull`](notes/main/inventory/InventoryRepository.kt.md#singleornull-zero-or-one-row)
-</details>
+More detail: [InventoryRepository.kt, `singleOrNull`](learning/notes/main/inventory/InventoryRepository.kt.md#singleornull-zero-or-one-row)
 
 ### Why does the repository return `null` for a missing SKU instead of throwing?
 
-<details>
-<summary>Answer</summary>
-
 "No row" is a normal answer to a lookup, not a failure. The repository only reports what the table
 holds. The **service** decides what a missing row means for each endpoint: `GET /inventory/{skuId}`
-turns it into a 404, and the purchase endpoint can make its own decision. The `?` in
+turns it into a 404. A purchase also has to tell "no such SKU" apart from "not enough stock", so its
+repository call returns a sealed `PurchaseResult` instead (see the Kotlin section). The `?` in
 `InventoryItem?` forces every caller to handle the missing case, because the compiler won't let them
 use `.quantity` until they have.
 
-Notes: [InventoryRepository.kt, nullable return type](notes/main/inventory/InventoryRepository.kt.md#findbyskuid-a-nullable-return-type)
-</details>
+More detail: [InventoryRepository.kt, nullable return type](learning/notes/main/inventory/InventoryRepository.kt.md#findbyskuid-a-nullable-return-type)
 
 ### How do you prevent SQL injection?
-
-<details>
-<summary>Answer</summary>
 
 The SKU comes straight from the URL, so it's untrusted. The query uses a named parameter,
 `WHERE sku_id = :skuId`, bound with `.param("skuId", skuId)`. `JdbcClient` runs it as a JDBC
@@ -67,13 +123,9 @@ can never change the query's structure. `x' OR '1'='1` is just a string that mat
 Building the SQL with a string template (`"... WHERE sku_id = '$skuId'"`) would paste the value
 into the SQL text, and the attacker's quote would close ours.
 
-Notes: [InventoryRepository.kt, binding the parameter](notes/main/inventory/InventoryRepository.kt.md#binding-the-parameter-and-mapping-the-row)
-</details>
+More detail: [InventoryRepository.kt, binding the parameter](learning/notes/main/inventory/InventoryRepository.kt.md#binding-the-parameter-and-mapping-the-row)
 
 ### Why a custom `SkuNotFoundException` instead of Spring's `ResponseStatusException`?
-
-<details>
-<summary>Answer</summary>
 
 Not for a more detailed message: `ResponseStatusException(HttpStatus.NOT_FOUND, "SKU not found: $skuId")`
 takes a message too. The real reasons are about which layer knows about HTTP:
@@ -81,32 +133,24 @@ takes a message too. The real reasons are about which layer knows about HTTP:
 1. **The service shouldn't speak HTTP.** `ResponseStatusException` puts a status code in the
    service. `SkuNotFoundException` only names the problem; `InventoryExceptionHandler` decides it's
    a 404. Same split as the repository returning `null` and the service deciding what that means.
-2. **Reuse.** The purchase endpoint will throw the same exception, and the same handler maps it.
+2. **Reuse.** The purchase endpoint throws the same exception, and the same handler maps it.
    One place to change if the 404 format changes.
 3. **Contract.** `ResponseStatusException` gives a JSON error body by default; inventory.yaml
    requires `text/plain`.
 
 One line: *the exception names the problem, the handler picks the response.*
 
-Notes: [SkuNotFoundException.kt](notes/main/inventory/error/SkuNotFoundException.kt.md#the-whole-class-in-one-line)
-</details>
+More detail: [SkuNotFoundException.kt](learning/notes/main/inventory/error/SkuNotFoundException.kt.md#the-whole-class-in-one-line)
 
 ### What happens if the database is down during `GET /inventory`?
-
-<details>
-<summary>Answer</summary>
 
 `JdbcClient` throws a `DataAccessException`. Nothing catches it, so Spring returns a 500. That's
 the honest answer: catching it and returning `[]` would tell the client "you have no stock" when
 the truth is "we don't know".
 
-Notes: [InventoryService.kt](notes/main/inventory/InventoryService.kt.md)
-</details>
+More detail: [InventoryService.kt](learning/notes/main/inventory/InventoryService.kt.md)
 
 ### Why one upsert instead of "look up the row, then insert or update"?
-
-<details>
-<summary>Answer</summary>
 
 Find-then-write makes the decision in Kotlin, between two trips to the database, and another
 request can change the row in that gap. With `widget` at 5 and two requests for +3 and +4 arriving
@@ -128,13 +172,9 @@ the new total from the same statement, so there's no second `SELECT` to race eit
 start gate, repeated 5 times. With find-then-write, the total would come out **too low and
 different on every run**, and the new-SKU test would collect duplicate-key exceptions.
 
-Notes: [InventoryRepository.kt, `addStock`](notes/main/inventory/InventoryRepository.kt.md#addstock-the-signature-and-the-two-decisions)
-</details>
+More detail: [InventoryRepository.kt, `addStock`](learning/notes/main/inventory/InventoryRepository.kt.md#addstock-the-signature-and-the-two-decisions)
 
 ### Doesn't that row lock slow the service down?
-
-<details>
-<summary>Answer</summary>
 
 No. It's the cheaper option:
 - The lock is on **one row**, so different SKUs never wait for each other.
@@ -146,13 +186,9 @@ Where it would hurt: one extremely hot SKU taking thousands of writes a second q
 That's a scale problem with its own fixes (batching writes, splitting the counter across rows), far
 beyond this app.
 
-Notes: [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#addstock-the-signature-and-the-two-decisions)
-</details>
+More detail: [InventoryRepository.kt](learning/notes/main/inventory/InventoryRepository.kt.md#addstock-the-signature-and-the-two-decisions)
 
 ### Why is the overflow guard written as `current <= MAX - new`?
-
-<details>
-<summary>Answer</summary>
 
 The column is a 4-byte Postgres `integer`, like Kotlin's `Int`. The natural form,
 `current + new <= MAX`, has to compute `current + new` first, and when the total is too big
@@ -165,13 +201,9 @@ stock unchanged.
 It relies on `new >= 1`: with `-5`, `MAX - (-5)` is `MAX + 5`, which overflows. The repository's
 KDoc states that precondition, and the service's `require` enforces it.
 
-Notes: [InventoryRepository.kt, the overflow guard](notes/main/inventory/InventoryRepository.kt.md#the-overflow-guard)
-</details>
+More detail: [InventoryRepository.kt, the overflow guard](learning/notes/main/inventory/InventoryRepository.kt.md#the-overflow-guard)
 
 ### Your table has `CHECK (quantity >= 0)`. Isn't that enough to prevent overselling?
-
-<details>
-<summary>Answer</summary>
 
 No. The constraint protects one invariant, "stock is never negative". It doesn't validate intent,
 and two real bugs pass it:
@@ -188,16 +220,12 @@ What actually prevents overselling is putting the check *inside* the write:
 waiting `UPDATE` re-checks its `WHERE` against the newly committed value. The `CHECK` is the last
 line of defense if that SQL were ever wrong. Input validation still belongs in the application.
 
-Notes: [InventoryService.kt, `purchaseInventory`](notes/main/inventory/InventoryService.kt.md#purchaseinventory-one-branch-per-outcome),
-[InventoryConcurrencyTest.kt, purchase race](notes/test/inventory/InventoryConcurrencyTest.kt.md#the-same-sku-purchase-race)
-</details>
+More detail: [InventoryService.kt, `purchaseInventory`](learning/notes/main/inventory/InventoryService.kt.md#purchaseinventory-one-branch-per-outcome),
+[InventoryConcurrencyTest.kt, purchase race](learning/notes/test/inventory/InventoryConcurrencyTest.kt.md#the-same-sku-purchase-race)
 
 ## API design and validation
 
 ### How does your API validate input?
-
-<details>
-<summary>Answer</summary>
 
 Two checks, in order, each with its own 400 message:
 
@@ -215,13 +243,9 @@ settings in `application.yml` turn that off (`accept-float-as-int`, `allow-coerc
 because a stock count must be exactly what the client sent, never a guess. A wrong `Content-Type`
 is a third, earlier check (400 instead of Spring's 415, which the contract doesn't list).
 
-Notes: [application.yml, strict JSON](notes/main/resources/application.yml.md#strict-json-the-jackson-block)
-</details>
+More detail: [application.yml, strict JSON](learning/notes/main/resources/application.yml.md#strict-json-the-jackson-block)
 
 ### Stock can be 0. Why does the request require a quantity of at least 1?
-
-<details>
-<summary>Answer</summary>
 
 They're two different quantities with two schemas in the contract:
 
@@ -236,13 +260,9 @@ The rule also closes a side door: without it, receiving 0 would create a SKU wit
 stock. Negatives matter more: receiving -5 would be an untracked purchase that skips the
 insufficient-stock check, and the overflow guard in `addStock` assumes quantity >= 1.
 
-Notes: [application.yml, strict JSON](notes/main/resources/application.yml.md#strict-json-the-jackson-block)
-</details>
+More detail: [application.yml, strict JSON](learning/notes/main/resources/application.yml.md#strict-json-the-jackson-block)
 
 ### How would you add a new product that has no stock yet?
-
-<details>
-<summary>Answer</summary>
 
 Not through this API, by design. The contract creates a SKU only as a side effect of receiving
 stock ("If the SKU does not yet exist in inventory, it is created"), and `minimum: 1` rules out a
@@ -257,12 +277,8 @@ If this service had to register SKUs, it would get a separate endpoint. Relaxing
 would make "receive" mean two things and break the contract. One consequence to know: a `404`
 from `GET` can't tell "unknown product" from "never stocked", which is fine for inventory, because
 you can't sell either.
-</details>
 
 ### `@Valid` already rejects 0. Why check again with `require` in the service?
-
-<details>
-<summary>Answer</summary>
 
 `@Valid` only protects the HTTP entry point. The service is a public function that a test, a
 scheduled job or the purchase code can call directly, and before the `require`,
@@ -277,13 +293,9 @@ scheduled job or the purchase code can call directly, and before the `require`,
 That's why nothing maps `IllegalArgumentException` to 400: if it fires, the mistake is ours.
 `InventoryServiceTest` calls the service directly to prove it.
 
-Notes: [InventoryService.kt](notes/main/inventory/InventoryService.kt.md#receiveinventory-a-precondition-and-a-block-body)
-</details>
+More detail: [InventoryService.kt](learning/notes/main/inventory/InventoryService.kt.md#receiveinventory-a-precondition-and-a-block-body)
 
 ### Creating a SKU returns 200, not 201, and a wrong Content-Type is 400, not 415. Why?
-
-<details>
-<summary>Answer</summary>
 
 REST convention says `201 Created` and `415 Unsupported Media Type`, but the contract lists only
 `200` and `400` for this endpoint, and clients are written against the contract. **The contract
@@ -292,13 +304,9 @@ plain return value, pinned by `status { isOk() }` in the controller test. The `4
 handler, because without it Spring's built-in resolver answers `HttpMediaTypeNotSupportedException`
 with `415` and a JSON body.
 
-Notes: [InventoryController.kt](notes/main/inventory/InventoryController.kt.md#post-inventoryskuid)
-</details>
+More detail: [InventoryController.kt](learning/notes/main/inventory/InventoryController.kt.md#post-inventoryskuid)
 
 ### A purchase has an invalid quantity *and* a SKU that doesn't exist. `400` or `404`?
-
-<details>
-<summary>Answer</summary>
 
 `400`. Spring handles a request in a fixed order, and everything before the handler function runs
 first:
@@ -314,15 +322,11 @@ Routing has no idea which SKUs exist, so `missing` is a valid URL. Only the SQL 
 out, and a bad body never gets there. It's also the cheaper order: a malformed request never costs
 a database round trip. `InventoryControllerTest` pins it.
 
-Notes: [InventoryController.kt, purchase](notes/main/inventory/InventoryController.kt.md#post-inventoryskuidpurchase)
-</details>
+More detail: [InventoryController.kt, purchase](learning/notes/main/inventory/InventoryController.kt.md#post-inventoryskuidpurchase)
 
 ## Kotlin
 
 ### What does the `?` in `InventoryItem?` mean, and how is it different from Java's `Optional`?
-
-<details>
-<summary>Answer</summary>
 
 `InventoryItem?` is its own type, "an item or `null`", and the compiler keeps it apart from
 `InventoryItem`. You can't call `.quantity` on it, return it where an `InventoryItem` is expected,
@@ -332,13 +336,9 @@ In Java any reference can be null and nothing warns you; `Optional` is an opt-in
 Kotlin puts the information in the type at no runtime cost: an `InventoryItem?` is a normal
 reference with no wrapper.
 
-Notes: [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#findbyskuid-a-nullable-return-type)
-</details>
+More detail: [InventoryRepository.kt](learning/notes/main/inventory/InventoryRepository.kt.md#findbyskuid-a-nullable-return-type)
 
 ### Walk me through `class SkuNotFoundException(skuId: String) : RuntimeException("SKU not found: $skuId")`
-
-<details>
-<summary>Answer</summary>
 
 - **`: RuntimeException("...")`** is `extends RuntimeException` plus the `super(...)` call in one
   step. The parentheses are required: Kotlin always makes you say which superclass constructor runs.
@@ -354,7 +354,8 @@ Notes: [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#f
 
 - **`RuntimeException`, not `Exception`:** Kotlin has no checked exceptions, so neither forces a
   `try/catch`. But Spring's `@Transactional` rolls back by default only on unchecked exceptions,
-  which will matter once purchases write to the database.
+  which would matter if a multi-statement transaction were ever added. Today every stock change is a
+  single SQL statement, so the code has no `@Transactional`.
 - **`skuId: String` with no `val`** is a plain constructor parameter. It exists while the object is
   being built (it's used in the message) and is then gone, so `ex.skuId` doesn't compile. Adding
   `val` would make it a property stored on the object, like `private val jdbcClient` in the
@@ -363,13 +364,9 @@ Notes: [InventoryRepository.kt](notes/main/inventory/InventoryRepository.kt.md#f
   more than a bare name needs braces: `"${item.skuId}"`. `"$item.skuId"` inserts `item` followed by
   the literal text `.skuId`.
 
-Notes: [SkuNotFoundException.kt](notes/main/inventory/error/SkuNotFoundException.kt.md#the-whole-class-in-one-line)
-</details>
+More detail: [SkuNotFoundException.kt](learning/notes/main/inventory/error/SkuNotFoundException.kt.md#the-whole-class-in-one-line)
 
 ### `private val`, `val`, or a plain parameter: what's the difference, and why are the layers `private val`?
-
-<details>
-<summary>Answer</summary>
 
 Two separate settings. **`val`** decides *storage*: is the value kept on the object after the
 constructor? **`private`** decides *visibility*: who can read it once it's kept?
@@ -385,13 +382,9 @@ should reach it (private). That enforces the architecture: the controller can't 
 `inventoryService.inventoryRepository.findBySkuId(...)` and skip the service's
 `null` → `SkuNotFoundException` logic. It's a compile error, not a code-review rule.
 
-Notes: [SkuNotFoundException.kt, storage vs visibility](notes/main/inventory/error/SkuNotFoundException.kt.md#the-whole-class-in-one-line)
-</details>
+More detail: [SkuNotFoundException.kt, storage vs visibility](learning/notes/main/inventory/error/SkuNotFoundException.kt.md#the-whole-class-in-one-line)
 
 ### What is `?:`, and how does `getInventory` return a non-null `InventoryItem` from a nullable lookup?
-
-<details>
-<summary>Answer</summary>
 
 `?:` is the **Elvis operator**, not a ternary. Kotlin has no ternary: `if` is an expression, so
 `if (cond) a else b` does that job. Elvis is narrower: `a ?: b` means "`a`, unless it's `null`, then `b`".
@@ -409,13 +402,9 @@ Why the non-null return type compiles: in Kotlin, `throw` is an **expression** o
 `@throws` in the KDoc matters more than in Java: Kotlin has no `throws` clause, so the KDoc is the
 only place a caller learns the function can throw.
 
-Notes: [InventoryService.kt, `getInventory`](notes/main/inventory/InventoryService.kt.md#getinventory-turning-no-row-into-an-error)
-</details>
+More detail: [InventoryService.kt, `getInventory`](learning/notes/main/inventory/InventoryService.kt.md#getinventory-turning-no-row-into-an-error)
 
 ### What if the service just passed the `null` up and the controller returned `InventoryItem?`?
-
-<details>
-<summary>Answer</summary>
 
 It would compile. Kotlin doesn't force you to handle `null` immediately, only to be honest about it:
 passing an `InventoryItem?` out through an `InventoryItem?` return type claims nothing false. The
@@ -430,39 +419,27 @@ unknown SKU (`isNotFound()`) would catch it.
 The point: the compiler protects every step we write, but the last hand-off to Spring is outside
 its reach. Making the service's return type non-null keeps `null` from ever getting there.
 
-Notes: [InventoryService.kt, `getInventory`](notes/main/inventory/InventoryService.kt.md#getinventory-turning-no-row-into-an-error)
-</details>
+More detail: [InventoryService.kt, `getInventory`](learning/notes/main/inventory/InventoryService.kt.md#getinventory-turning-no-row-into-an-error)
 
 ### Why is the row mapper a lambda and not `query(InventoryItem::class.java)`?
-
-<details>
-<summary>Answer</summary>
 
 The class-based version didn't compile: Spring 7 declares it as "each row might map to null", so
 Kotlin saw `List<InventoryItem?>`. The lambda keeps its own return type, and it always builds a
 real `InventoryItem`, so the list is `List<InventoryItem>`. It's a compile-time fix; the data was
 never actually null. It's also more explicit about which column goes into which property.
 
-Notes: [InventoryRepository.kt, the lambda](notes/main/inventory/InventoryRepository.kt.md#mapping-each-row-the-lambda)
-</details>
+More detail: [InventoryRepository.kt, the lambda](learning/notes/main/inventory/InventoryRepository.kt.md#mapping-each-row-the-lambda)
 
 ### What does `data class` give you, and does it make the class immutable?
-
-<details>
-<summary>Answer</summary>
 
 It generates `equals`, `hashCode`, `toString`, `copy` and `componentN` from the constructor
 properties. So `InventoryItem("widget", 5) == InventoryItem("widget", 5)` is `true` (value
 equality, because `==` calls `equals`). It does **not** make the class immutable: `val` does.
 `copy` returns a new object and leaves the original unchanged.
 
-Notes: [InventoryItem.kt](notes/main/inventory/InventoryItem.kt.md)
-</details>
+More detail: [InventoryItem.kt](learning/notes/main/inventory/InventoryItem.kt.md)
 
 ### Why does `removeStock` return a sealed `PurchaseResult` instead of `InventoryItem?` or throwing?
-
-<details>
-<summary>Answer</summary>
 
 A purchase has three outcomes: bought, not enough stock (`400`), and no such SKU (`404`). A `null`
 can only carry one failure, so the service would need a second query to learn which, and the stock
@@ -475,40 +452,28 @@ someone adds a fourth case, that `when` stops compiling until it's handled, inst
 silently into an `else`. `Purchased` is a `data class` because it carries data. The failures are
 `data object`s, one instance each.
 
-Notes: [PurchaseResult.kt](notes/main/inventory/PurchaseResult.kt.md)
-</details>
+More detail: [PurchaseResult.kt](learning/notes/main/inventory/PurchaseResult.kt.md)
 
 ## Spring
 
 ### Two requests arrive at the same time. How many controller objects are there?
-
-<details>
-<summary>Answer</summary>
 
 One. Beans are singletons, built once at startup through constructor injection, bottom-up
 (repository → service → controller). Every request thread shares the same object. That's safe
 because the beans are **stateless**: they only hold `val` references to other beans, never
 per-request data.
 
-Notes: [InventoryController.kt](notes/main/inventory/InventoryController.kt.md)
-</details>
+More detail: [InventoryController.kt](learning/notes/main/inventory/InventoryController.kt.md)
 
 ### What happens if you remove `@Service` from `InventoryService`?
-
-<details>
-<summary>Answer</summary>
 
 The app fails at **startup**, not on the first request: the controller's constructor needs an
 `InventoryService` bean and none exists ("required a bean of type ... that could not be found").
 Beans are created at startup, so missing dependencies fail fast.
 
-Notes: [InventoryService.kt](notes/main/inventory/InventoryService.kt.md)
-</details>
+More detail: [InventoryService.kt](learning/notes/main/inventory/InventoryService.kt.md)
 
 ### How does a `SkuNotFoundException` thrown in the service become a 404?
-
-<details>
-<summary>Answer</summary>
 
 The exception passes untouched through the controller. Spring catches **every** exception that
 escapes a controller and asks its resolvers, in order:
@@ -529,13 +494,9 @@ The handler returns `ResponseEntity<String>`, not `String`, because a plain retu
 `ex.message ?: "..."` is needed because `Throwable.message` is declared `String?`: the compiler
 can't know our subclass always sets it.
 
-Notes: [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md)
-</details>
+More detail: [InventoryExceptionHandler.kt](learning/notes/main/inventory/error/InventoryExceptionHandler.kt.md)
 
 ### Why don't your handlers send Spring's `ex.message` to the client?
-
-<details>
-<summary>Answer</summary>
 
 Spring's messages are written for developers. A validation failure's `ex.message` includes the full
 controller method signature, package and class names: an **information leak** to anyone who sends a
@@ -544,13 +505,9 @@ bad request. So the validation handler sends only the `@Min` message we wrote
 handlers send fixed strings. `handleInvalidRequestBody` doesn't even take the exception as a
 parameter, because it never reads it.
 
-Notes: [InventoryExceptionHandler.kt](notes/main/inventory/error/InventoryExceptionHandler.kt.md)
-</details>
+More detail: [InventoryExceptionHandler.kt](learning/notes/main/inventory/error/InventoryExceptionHandler.kt.md)
 
 ### When does each kind of mistake surface: compile time, startup, or the first request?
-
-<details>
-<summary>Answer</summary>
 
 | When | Example from this project | Who catches it |
 | --- | --- | --- |
@@ -566,42 +523,30 @@ with `@PathVariable("skuId") sku: String`, or keep the names equal.
 This is why the controller tests go through MockMvc (real path matching, real exception handling)
 instead of calling `controller.getInventory("widget")` directly, which would pass with the bug.
 
-Notes: [InventoryController.kt](notes/main/inventory/InventoryController.kt.md)
-</details>
+More detail: [InventoryController.kt](learning/notes/main/inventory/InventoryController.kt.md)
 
 ### How would you deploy to a different database without changing any files?
-
-<details>
-<summary>Answer</summary>
 
 Set environment variables such as `SPRING_DATASOURCE_URL`. Spring layers property sources, and
 environment variables override `application.yml`, so the repo never holds per-environment values
 or passwords. Whatever launches the process (Kubernetes, ECS, `docker run -e`) sets them.
 Command-line arguments beat environment variables, which beat the yml.
 
-Notes: [application.yml](notes/main/resources/application.yml.md)
-</details>
+More detail: [application.yml](learning/notes/main/resources/application.yml.md)
 
 ## Database and migrations
 
 ### You need a new `created_at` column. What do you do?
 
-<details>
-<summary>Answer</summary>
-
 Add a new migration, `V2__add_created_at.sql`, with `ALTER TABLE`. Migrations are a chain of
 changes, like commits; the schema is the whole chain. Editing `V1` after it has run makes Flyway
 fail at startup with a checksum mismatch.
 
-Notes: [V1__create_inventory.sql](notes/main/resources/db/migration/V1__create_inventory.sql.md)
-</details>
+More detail: [V1__create_inventory.sql](learning/notes/main/resources/db/migration/V1__create_inventory.sql.md)
 
 ## Testing
 
 ### How do you know `GET /inventory/{skuId}` works? What do the tests actually cover?
-
-<details>
-<summary>Answer</summary>
 
 Two levels, each against a real Postgres (Testcontainers):
 
@@ -615,14 +560,10 @@ The zero-stock and case-sensitivity cases are tested at both levels on purpose: 
 tests prove the SQL, and the controller tests prove nothing above the SQL changes the answer (for
 example, a service that treated `quantity == 0` as "not found").
 
-Notes: [InventoryControllerTest.kt](notes/test/inventory/InventoryControllerTest.kt.md),
-[InventoryRepositoryTest.kt](notes/test/inventory/InventoryRepositoryTest.kt.md)
-</details>
+More detail: [InventoryControllerTest.kt](learning/notes/test/inventory/InventoryControllerTest.kt.md),
+[InventoryRepositoryTest.kt](learning/notes/test/inventory/InventoryRepositoryTest.kt.md)
 
 ### If `findBySkuId` lost its `WHERE` clause, which repository tests would fail?
-
-<details>
-<summary>Answer</summary>
 
 Trace each test: rows in the table → what the query returns → `singleOrNull()` → compare. Each test
 starts with an empty table, so "the whole database" is only that test's own inserts.
@@ -638,13 +579,9 @@ Lesson: a table with one row can't tell "found the right row" apart from "return
 there". That's why the first test inserts `gadget` as a **decoy**. The function can never return
 "everything": its type is `InventoryItem?`, and `singleOrNull()` squashes the list to one item or `null`.
 
-Notes: [InventoryRepositoryTest.kt](notes/test/inventory/InventoryRepositoryTest.kt.md)
-</details>
+More detail: [InventoryRepositoryTest.kt](learning/notes/test/inventory/InventoryRepositoryTest.kt.md)
 
 ### How do you know your race tests would actually catch an oversell?
-
-<details>
-<summary>Answer</summary>
 
 A **negative control**: `NegativeControlTest` runs a deliberately naive purchase
 (`NaiveInventoryRepository`: read the stock, check it in Kotlin, write an absolute value) through
@@ -657,42 +594,31 @@ the same `race()` and the same `assertNoOversell` that guard the real repository
   asserts it failed for that reason.
 
 Because the check is **shared**, this proves the exact assertions on the real code can detect a
-lost update. See [NegativeControlTest notes](notes/test/inventory/NegativeControlTest.kt.md).
-</details>
+lost update. More detail: [NegativeControlTest notes](learning/notes/test/inventory/NegativeControlTest.kt.md).
 
 ### Why does the purchase stay correct with several app instances?
-
-<details>
-<summary>Answer</summary>
 
 The guarantee lives in Postgres, not in the app: one `UPDATE ... SET quantity = quantity - :q
 WHERE quantity >= :q` takes a row lock, so a second buyer waits and re-checks against the new value.
 A Kotlin-side fix (a `synchronized` block or a per-SKU lock around read-then-write) would pass the
 single-app race tests but fail with two instances, because each JVM has its own lock.
 `MultiInstanceRaceTest` starts two full app contexts on one database and races buyers across both
-over HTTP to prove it. See [MultiInstanceRaceTest notes](notes/test/inventory/MultiInstanceRaceTest.kt.md).
-</details>
+over HTTP to prove it. More detail: [MultiInstanceRaceTest notes](learning/notes/test/inventory/MultiInstanceRaceTest.kt.md).
 
 ## Architecture and production
 
-The full sketch, with a diagram, is in [docs/architecture/architecture.md](../architecture/architecture.md).
+The service isn't deployed anywhere. These answers describe a hypothetical production setup; the full sketch,
+with a diagram, is in [docs/architecture/architecture.md](architecture/architecture.md).
 
 ### How would you host this on AWS?
-
-<details>
-<summary>Answer</summary>
 
 Route 53 and API Gateway (with WAF) in front of an experience layer, which calls the inventory service privately
 through an internal ALB. Both run on ECS Fargate, the inventory service as 2+ tasks across 2 availability zones,
 backed by RDS PostgreSQL Multi-AZ. Fargate because at ~100 TPS a cluster (EKS) is overkill, and Lambda means JVM
 cold starts plus a database connection per invocation. Running several tasks is safe because the oversell
 guarantee lives in Postgres, not in app memory: `MultiInstanceRaceTest` proves it.
-</details>
 
 ### Fulfillment receives 500 units. How does that reach your database, and what if inventory is down?
-
-<details>
-<summary>Answer</summary>
 
 Never by writing to the tables directly: the inventory service owns its data, so its rules always run.
 Fulfillment publishes a "shipment received" message with a shipment ID to SQS. The inventory service consumes it
@@ -700,12 +626,8 @@ and runs the same code as `POST /inventory/{skuId}`. If inventory is down, the m
 
 The shipment ID matters because receiving *adds* stock, and SQS can deliver a message twice. Inserting the ID into
 a `processed_shipments` table in the same transaction as the stock change makes a duplicate a no-op.
-</details>
 
 ### Would you put a Redis cache in front of the inventory?
-
-<details>
-<summary>Answer</summary>
 
 Carts, yes: they're short-lived and a TTL handles abandonment. Inventory counts only when read traffic strains
 Postgres. At ~100 TPS a primary-key read is about a millisecond, and RDS bills per instance, not per query, so
@@ -715,14 +637,9 @@ If I add one: cache-aside, delete the key on every write, short TTL. Not write-t
 and the cache write aren't atomic: two purchases can update them in opposite orders and leave an old count cached.
 And a purchase never reads the cache: the atomic `UPDATE ... WHERE quantity >= :q` is the final check *and* the
 write. Checking first and then writing brings back the oversell race.
-</details>
 
 ### Nuuly rents clothes. What does `quantity` mean for a garment that's out with a customer?
-
-<details>
-<summary>Answer</summary>
 
 `quantity` is units on hand and available to ship. Rented garments aren't counted. A return is restocked
 through the same receive path once it's inspected and cleaned. With more time, I'd track individual garments with
 a status (available, rented, cleaning) instead of a count.
-</details>

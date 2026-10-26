@@ -126,7 +126,7 @@ The walkthrough logs record my answers, including the wrong ones. A few examples
 | Study-notes files, one per source file | 32 |
 | Kotlin/Spring concepts indexed, each linked to where it first appears | ~150 ([index](learning/kotlin-concepts.md)) |
 | Walkthrough logs | 6 |
-| Interview-prep questions with answers | 34 ([sheet](learning/interview-prep.md)) |
+| Design FAQ questions with answers | 38 ([FAQ](faq.md)) |
 | Session transcripts committed | 30 |
 
 ## Where to look
